@@ -15,6 +15,7 @@ model Hotel {
   updatedAt   DateTime @updatedAt
 
   branches    HotelBranch[]
+  images      HotelImage[]
 }
 
 model HotelBranch {
@@ -86,4 +87,17 @@ model User {
   updatedAt DateTime @updatedAt
 
   bookings  Booking[]
+}
+
+model HotelImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  hotelId   String   @db.Uuid
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
 }
