@@ -4,6 +4,79 @@ import prisma from "../lib/prisma.js";
 
 const router = Router();
 
+
+router.put("/:id", async (req, res) => {
+  try {
+    const { name, description } = req.body;
+
+    if (name === undefined && description === undefined) {
+      res.status(400).json({
+        success: false,
+        message: "Provide a name or description to update",
+      });
+      return;
+    }
+
+    if (
+      name !== undefined &&
+      (typeof name !== "string" || name.trim().length === 0)
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Hotel name must be a non-empty string",
+      });
+      return;
+    }
+
+    if (
+      description !== undefined &&
+      description !== null &&
+      typeof description !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Description must be a string or null",
+      });
+      return;
+    }
+
+    const hotel = await prisma.hotel.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(description !== undefined
+          ? { description: description?.trim() || null }
+          : {}),
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: hotel,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Hotel not found",
+      });
+      return;
+    }
+
+    console.error("Failed to update hotel:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update hotel",
+    });
+  }
+});
+
+
 router.post("/", async (req, res) => {
   try {
     const { name, description } = req.body;
