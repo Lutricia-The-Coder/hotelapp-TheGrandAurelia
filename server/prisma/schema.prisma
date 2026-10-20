@@ -17,6 +17,7 @@ model Hotel {
   branches    HotelBranch[]
   images      HotelImage[]
   reviews     Review[]
+  favorites   Favorite[]
 }
 
 model HotelBranch {
@@ -89,6 +90,7 @@ model User {
 
   bookings  Booking[]
   reviews   Review[]
+  favorites Favorite[]
 }
 
 model HotelImage {
@@ -138,5 +140,17 @@ model Review {
   hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@unique([userId, hotelId])
+  @@index([hotelId])
+}
+
+model Favorite {
+  userId    String   @db.Uuid
+  hotelId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, hotelId])
   @@index([hotelId])
 }
