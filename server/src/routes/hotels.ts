@@ -4,6 +4,53 @@ import prisma from "../lib/prisma.js";
 
 const router = Router();
 
+router.post("/", async (req, res) => {
+  try {
+    const { name, description } = req.body;
+
+    if (
+      typeof name !== "string" ||
+      name.trim().length === 0
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Hotel name is required",
+      });
+      return;
+    }
+
+    if (
+      description !== undefined &&
+      description !== null &&
+      typeof description !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Description must be a string",
+      });
+      return;
+    }
+
+    const hotel = await prisma.hotel.create({
+      data: {
+        name: name.trim(),
+        description: description?.trim() || null,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: hotel,
+    });
+  } catch (error) {
+    console.error("Failed to create hotel:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create hotel",
+    });
+  }
+});
+
 
 router.get("/:id", async (req, res) => {
   try {
