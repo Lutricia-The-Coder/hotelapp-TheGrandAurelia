@@ -11,8 +11,41 @@ model Hotel {
   id          String   @id @default(uuid()) @db.Uuid
   name        String
   description String?
-  city        String
-  country     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  branches    HotelBranch[]
+}
+
+model HotelBranch {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  address     String
+  city        String
+  country     String
+  phone       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotelId     String   @db.Uuid
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypes   RoomType[]
+
+  @@index([hotelId])
+}
+
+model RoomType {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?
+  capacity      Int
+  pricePerNight Decimal  @db.Decimal(10, 2)
+  totalRooms    Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branchId      String   @db.Uuid
+  branch        HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
 }
