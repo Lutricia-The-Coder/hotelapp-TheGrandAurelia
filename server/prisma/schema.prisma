@@ -31,7 +31,7 @@ model HotelBranch {
   hotelId     String   @db.Uuid
   hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes   RoomType[]
-
+amenities     BranchAmenity[]
   @@index([hotelId])
 }
 
@@ -100,4 +100,24 @@ model HotelImage {
   hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([hotelId])
+}
+
+model Amenity {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  branches  BranchAmenity[]
+}
+
+model BranchAmenity {
+  branchId  String   @db.Uuid
+  amenityId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  branch    HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  amenity   Amenity     @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([branchId, amenityId])
+  @@index([amenityId])
 }
