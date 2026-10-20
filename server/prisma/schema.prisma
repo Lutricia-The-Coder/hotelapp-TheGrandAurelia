@@ -63,6 +63,8 @@ model Booking {
 
   roomTypeId      String        @db.Uuid
   roomType        RoomType      @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  userId            String        @db.Uuid
+  user              User          @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([roomTypeId, checkIn, checkOut])
   @@index([status])
@@ -73,11 +75,15 @@ enum BookingStatus {
   CONFIRMED
   CANCELLED
   COMPLETED
-}model User {
+}
+
+model User {
   id        String   @id @default(uuid()) @db.Uuid
   name      String?
   email     String   @unique
   image     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  bookings  Booking[]
 }
