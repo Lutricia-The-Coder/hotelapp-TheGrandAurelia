@@ -94,6 +94,7 @@ model User {
   bookings  Booking[]
   reviews   Review[]
   favorites Favorite[]
+  role      UserRole  @default(GUEST)
 }
 
 model HotelImage {
@@ -178,4 +179,9 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   REFUNDED
+}
+
+enum UserRole {
+  GUEST
+  ADMIN
 }
