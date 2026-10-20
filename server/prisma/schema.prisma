@@ -33,6 +33,9 @@ model HotelBranch {
   hotelId     String   @db.Uuid
   hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes   RoomType[]
+  checkInTime        String?
+checkOutTime          String?
+cancellationPolicy    String?
 amenities     BranchAmenity[]
   @@index([hotelId])
 }
