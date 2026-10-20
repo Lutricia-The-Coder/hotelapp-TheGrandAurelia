@@ -66,9 +66,9 @@ model Booking {
 
   roomTypeId      String        @db.Uuid
   roomType        RoomType      @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
-  userId            String        @db.Uuid
-  user              User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-
+  userId          String        @db.Uuid
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments        Payment[]
   @@index([roomTypeId, checkIn, checkOut])
   @@index([status])
 }
@@ -153,4 +153,26 @@ model Favorite {
 
   @@id([userId, hotelId])
   @@index([hotelId])
+}
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("USD")
+  status            PaymentStatus @default(PENDING)
+  provider          String
+  providerPaymentId String?       @unique
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  bookingId         String        @db.Uuid
+  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, status])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
 }
