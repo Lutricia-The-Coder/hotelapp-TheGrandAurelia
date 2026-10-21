@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import hotelsRouter from "./routes/hotels.js";
 import branchesRouter from "./routes/branches.js";
+import roomsRouter from "./routes/rooms.js";
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 app.use("/api/v1/hotels", hotelsRouter); 
 app.use("/api/v1/branches", branchesRouter);
+app.use("/api/v1/rooms", roomsRouter);
 app.get("/", (_req, res) => {
   res.status(200).send("Hotel Booking API is running!");
 });
