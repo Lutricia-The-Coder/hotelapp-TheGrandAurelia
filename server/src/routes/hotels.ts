@@ -4,6 +4,38 @@ import prisma from "../lib/prisma.js";
 
 const router = Router();
 
+router.delete("/:id", async (req, res) => {
+  try {
+    const hotel = await prisma.hotel.delete({
+      where: { id: req.params.id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Hotel deleted successfully",
+      data: hotel,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Hotel not found",
+      });
+      return;
+    }
+
+    console.error("Failed to delete hotel:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete hotel",
+    });
+  }
+});
 
 router.put("/:id", async (req, res) => {
   try {
