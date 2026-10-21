@@ -167,4 +167,50 @@ router.post("/", async (req, res) => {
   }
 });
 
+// PATCH /api/v1/bookings/:id/cancel
+router.patch("/:id/cancel", async (req, res) => {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!booking) {
+      res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+      return;
+    }
+
+    if (
+      booking.status === "CANCELLED" ||
+      booking.status === "COMPLETED"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: `A ${booking.status.toLowerCase()} booking cannot be cancelled`,
+      });
+      return;
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: "CANCELLED" },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Booking cancelled successfully",
+      data: updatedBooking,
+    });
+  } catch (error) {
+    console.error("Failed to cancel booking:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel booking",
+    });
+  }
+});
+
 export default router;
