@@ -218,4 +218,39 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/v1/rooms/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    const room = await prisma.roomType.delete({
+      where: { id: req.params.id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Room type deleted successfully",
+      data: room,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Room type not found",
+      });
+      return;
+    }
+
+    console.error("Failed to delete room type:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete room type",
+    });
+  }
+});
+
 export default router;
