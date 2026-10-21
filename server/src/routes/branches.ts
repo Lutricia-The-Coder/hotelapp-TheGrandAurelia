@@ -78,4 +78,100 @@ router.post("/", async (req, res) => {
   }
 });
 
+// PUT /api/v1/branches/:id
+router.put("/:id", async (req, res) => {
+  try {
+    const { name, address, city, country, phone, checkInTime, checkOutTime, cancellationPolicy } =
+      req.body;
+
+    const data: {
+      name?: string;
+      address?: string;
+      city?: string;
+      country?: string;
+      phone?: string | null;
+      checkInTime?: string | null;
+      checkOutTime?: string | null;
+      cancellationPolicy?: string | null;
+    } = {};
+
+    for (const [field, value] of Object.entries({
+      name,
+      address,
+      city,
+      country,
+    })) {
+      if (value !== undefined) {
+        if (typeof value !== "string" || !value.trim()) {
+          res.status(400).json({
+            success: false,
+            message: `${field} must be a non-empty string`,
+          });
+          return;
+        }
+
+        data[field as "name" | "address" | "city" | "country"] = value.trim();
+      }
+    }
+
+    for (const [field, value] of Object.entries({
+      phone,
+      checkInTime,
+      checkOutTime,
+      cancellationPolicy,
+    })) {
+      if (value !== undefined) {
+        if (value !== null && typeof value !== "string") {
+          res.status(400).json({
+            success: false,
+            message: `${field} must be a string or null`,
+          });
+          return;
+        }
+
+        data[field as "phone" | "checkInTime" | "checkOutTime" | "cancellationPolicy"] =
+          value === null ? null : value.trim();
+      }
+    }
+
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "Provide at least one valid field to update",
+      });
+      return;
+    }
+
+    const branch = await prisma.hotelBranch.update({
+      where: { id: req.params.id },
+      data,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: branch,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Hotel branch not found",
+      });
+      return;
+    }
+
+    console.error("Failed to update hotel branch:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update hotel branch",
+    });
+  }
+});
+
 export default router;
