@@ -174,4 +174,39 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/v1/branches/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    const branch = await prisma.hotelBranch.delete({
+      where: { id: req.params.id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Hotel branch deleted successfully",
+      data: branch,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Hotel branch not found",
+      });
+      return;
+    }
+
+    console.error("Failed to delete hotel branch:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete hotel branch",
+    });
+  }
+});
+
 export default router;
