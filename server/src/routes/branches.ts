@@ -34,4 +34,48 @@ router.get("/hotel/:hotelId", async (req, res) => {
   }
 });
 
+
+// POST /api/v1/branches
+router.post("/", async (req, res) => {
+  try {
+    const { name, address, city, country, hotelId } = req.body;
+
+    if (
+      typeof name !== "string" || !name.trim() ||
+      typeof address !== "string" || !address.trim() ||
+      typeof city !== "string" || !city.trim() ||
+      typeof country !== "string" || !country.trim() ||
+      typeof hotelId !== "string" || !hotelId.trim()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Name, address, city, country, and hotelId are required",
+      });
+      return;
+    }
+
+    const branch = await prisma.hotelBranch.create({
+      data: {
+        name: name.trim(),
+        address: address.trim(),
+        city: city.trim(),
+        country: country.trim(),
+        hotelId: hotelId.trim(),
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: branch,
+    });
+  } catch (error) {
+    console.error("Failed to create hotel branch:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create hotel branch",
+    });
+  }
+});
+
 export default router;
