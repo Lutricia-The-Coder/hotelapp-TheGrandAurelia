@@ -218,6 +218,84 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// GET /api/v1/rooms/:id/availability?checkIn=2026-11-01&checkOut=2026-11-03
+router.get("/:id/availability", async (req, res) => {
+  try {
+    const { checkIn, checkOut } = req.query;
+
+    if (
+      typeof checkIn !== "string" ||
+      typeof checkOut !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "checkIn and checkOut query parameters are required",
+      });
+      return;
+    }
+
+    const parsedCheckIn = new Date(checkIn);
+    const parsedCheckOut = new Date(checkOut);
+
+    if (
+      Number.isNaN(parsedCheckIn.getTime()) ||
+      Number.isNaN(parsedCheckOut.getTime()) ||
+      parsedCheckOut <= parsedCheckIn
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Provide valid dates with checkOut later than checkIn",
+      });
+      return;
+    }
+
+    const room = await prisma.roomType.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!room) {
+      res.status(404).json({
+        success: false,
+        message: "Room type not found",
+      });
+      return;
+    }
+
+    const overlappingBookings = await prisma.booking.aggregate({
+      where: {
+        roomTypeId: room.id,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        checkIn: { lt: parsedCheckOut },
+        checkOut: { gt: parsedCheckIn },
+      },
+      _sum: { roomQuantity: true },
+    });
+
+    const bookedRooms = overlappingBookings._sum.roomQuantity ?? 0;
+    const availableRooms = Math.max(0, room.totalRooms - bookedRooms);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        roomTypeId: room.id,
+        totalRooms: room.totalRooms,
+        bookedRooms,
+        availableRooms,
+        checkIn: parsedCheckIn,
+        checkOut: parsedCheckOut,
+        available: availableRooms > 0,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to check room availability:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check room availability",
+    });
+  }
+});
+
 // DELETE /api/v1/rooms/:id
 router.delete("/:id", async (req, res) => {
   try {
