@@ -217,7 +217,7 @@ router.put("/:id", async (req, res) => {
     });
   }
 });
-
+ 
 // GET /api/v1/rooms/:id/availability?checkIn=2026-11-01&checkOut=2026-11-03
 router.get("/:id/availability", async (req, res) => {
   try {
