@@ -100,4 +100,122 @@ router.post("/", async (req, res) => {
   }
 });
 
+// PUT /api/v1/rooms/:id
+router.put("/:id", async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      capacity,
+      pricePerNight,
+      totalRooms,
+    } = req.body;
+
+    const data: {
+      name?: string;
+      description?: string | null;
+      capacity?: number;
+      pricePerNight?: number;
+      totalRooms?: number;
+    } = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        res.status(400).json({
+          success: false,
+          message: "Name must be a non-empty string",
+        });
+        return;
+      }
+      data.name = name.trim();
+    }
+
+    if (description !== undefined) {
+      if (description !== null && typeof description !== "string") {
+        res.status(400).json({
+          success: false,
+          message: "Description must be a string or null",
+        });
+        return;
+      }
+      data.description = description;
+    }
+
+    if (capacity !== undefined) {
+      if (!Number.isInteger(capacity) || capacity < 1) {
+        res.status(400).json({
+          success: false,
+          message: "Capacity must be a positive integer",
+        });
+        return;
+      }
+      data.capacity = capacity;
+    }
+
+    if (pricePerNight !== undefined) {
+      if (
+        typeof pricePerNight !== "number" ||
+        !Number.isFinite(pricePerNight) ||
+        pricePerNight < 0
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Price per night must be a non-negative number",
+        });
+        return;
+      }
+      data.pricePerNight = pricePerNight;
+    }
+
+    if (totalRooms !== undefined) {
+      if (!Number.isInteger(totalRooms) || totalRooms < 1) {
+        res.status(400).json({
+          success: false,
+          message: "Total rooms must be a positive integer",
+        });
+        return;
+      }
+      data.totalRooms = totalRooms;
+    }
+
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "Provide at least one field to update",
+      });
+      return;
+    }
+
+    const room = await prisma.roomType.update({
+      where: { id: req.params.id },
+      data,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: room,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
+      res.status(404).json({
+        success: false,
+        message: "Room type not found",
+      });
+      return;
+    }
+
+    console.error("Failed to update room type:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update room type",
+    });
+  }
+});
+
 export default router;
