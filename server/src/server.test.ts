@@ -9,6 +9,7 @@ const {
   updateMock,
   deleteMock,
   branchFindManyMock,
+  branchCreateMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -16,6 +17,7 @@ const {
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
   branchFindManyMock: vi.fn(),
+  branchCreateMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -29,6 +31,7 @@ vi.mock("./lib/prisma.js", () => ({
     },
     hotelBranch: {
       findMany: branchFindManyMock,
+      create: branchCreateMock,
     },
   },
 }));
@@ -191,5 +194,32 @@ describe("Hotel Branches API", () => {
     expect(response.body.data[0].name).toBe("Central Branch");
     expect(branchFindManyMock).toHaveBeenCalledOnce();
   });
+  
+  it("creates a hotel branch with valid data", async () => {
+    branchCreateMock.mockResolvedValue({
+      id: "branch-test-2",
+      name: "New Central Branch",
+      address: "456 Main Street",
+      city: "Polokwane",
+      country: "South Africa",
+      hotelId: "hotel-test-1",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/branches")
+      .send({
+        name: "New Central Branch",
+        address: "456 Main Street",
+        city: "Polokwane",
+        country: "South Africa",
+        hotelId: "hotel-test-1",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.name).toBe("New Central Branch");
+    expect(branchCreateMock).toHaveBeenCalledOnce();
+  });
+
 });
 
