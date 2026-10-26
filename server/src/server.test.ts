@@ -501,6 +501,32 @@ it("returns zero available rooms when all rooms are booked", async () => {
   expect(response.body.data.available).toBe(false);
 });
 
+it("never returns negative available rooms when bookings exceed inventory", async () => {
+  roomFindUniqueMock.mockResolvedValue({
+    id: "room-test-1",
+    totalRooms: 10,
+  });
+
+  bookingAggregateMock.mockResolvedValue({
+    _sum: {
+      roomQuantity: 12,
+    },
+  });
+
+  const response = await request(app)
+    .get("/api/v1/rooms/room-test-1/availability")
+    .query({
+      checkIn: "2026-11-10",
+      checkOut: "2026-11-12",
+    });
+
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+  expect(response.body.data.bookedRooms).toBe(12);
+  expect(response.body.data.availableRooms).toBe(0);
+  expect(response.body.data.available).toBe(false);
+});
+
 
 });
 
