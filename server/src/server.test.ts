@@ -14,6 +14,8 @@ const {
   branchDeleteMock,
   roomFindManyMock,
   roomCreateMock,
+  roomUpdateMock,
+  roomDeleteMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -26,6 +28,8 @@ const {
   branchDeleteMock: vi.fn(),
   roomFindManyMock: vi.fn(),
   roomCreateMock: vi.fn(),
+  roomUpdateMock: vi.fn(),
+  roomDeleteMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -46,6 +50,8 @@ vi.mock("./lib/prisma.js", () => ({
     roomType: {
       findMany: roomFindManyMock,
       create: roomCreateMock,
+      update: roomUpdateMock,
+      delete: roomDeleteMock,
     },
   },
 }));
@@ -334,6 +340,46 @@ describe("Room Types API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.name).toBe("Family Suite");
     expect(roomCreateMock).toHaveBeenCalledOnce();
+  });
+
+  it("updates an existing room type", async () => {
+    roomUpdateMock.mockResolvedValue({
+      id: "room-test-1",
+      name: "Updated Deluxe Room",
+      description: "An upgraded deluxe room",
+      pricePerNight: 1500,
+      capacity: 2,
+      totalRooms: 8,
+      branchId: "branch-test-1",
+    });
+
+    const response = await request(app)
+      .put("/api/v1/rooms/room-test-1")
+      .send({
+        name: "Updated Deluxe Room",
+        pricePerNight: 1500,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.name).toBe("Updated Deluxe Room");
+    expect(roomUpdateMock).toHaveBeenCalledOnce();
+  });
+
+  it("deletes an existing room type", async () => {
+    roomDeleteMock.mockResolvedValue({
+      id: "room-test-1",
+      name: "Deluxe Room",
+      branchId: "branch-test-1",
+    });
+
+    const response = await request(app).delete(
+      "/api/v1/rooms/room-test-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(roomDeleteMock).toHaveBeenCalledOnce();
   });
 
 });
