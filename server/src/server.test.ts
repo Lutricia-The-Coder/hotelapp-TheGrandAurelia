@@ -16,6 +16,12 @@ const {
   roomCreateMock,
   roomUpdateMock,
   roomDeleteMock,
+  roomFindUniqueMock,
+  userFindUniqueMock,
+  bookingFindManyMock,
+  bookingCreateMock,
+  bookingUpdateMock,
+  bookingDeleteMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -30,6 +36,12 @@ const {
   roomCreateMock: vi.fn(),
   roomUpdateMock: vi.fn(),
   roomDeleteMock: vi.fn(),
+  roomFindUniqueMock: vi.fn(),
+  userFindUniqueMock: vi.fn(),
+  bookingFindManyMock: vi.fn(),
+  bookingCreateMock: vi.fn(),
+  bookingUpdateMock: vi.fn(),
+  bookingDeleteMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -49,9 +61,19 @@ vi.mock("./lib/prisma.js", () => ({
     },
     roomType: {
       findMany: roomFindManyMock,
+      findUnique: roomFindUniqueMock,
       create: roomCreateMock,
       update: roomUpdateMock,
       delete: roomDeleteMock,
+    },
+    user: {
+      findUnique: userFindUniqueMock,
+    },
+    booking: {
+      findMany: bookingFindManyMock,
+      create: bookingCreateMock,
+      update: bookingUpdateMock,
+      delete: bookingDeleteMock,
     },
   },
 }));
@@ -384,4 +406,83 @@ describe("Room Types API", () => {
 
 });
 
+
+describe("Bookings API", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns bookings for a specific user", async () => {
+    bookingFindManyMock.mockResolvedValue([
+      {
+        id: "booking-test-1",
+        userId: "user-test-1",
+        roomTypeId: "room-test-1",
+        checkIn: new Date("2026-11-01T00:00:00.000Z"),
+        checkOut: new Date("2026-11-03T00:00:00.000Z"),
+        adults: 2,
+        children: 0,
+        roomQuantity: 1,
+        totalPrice: 2400,
+        status: "PENDING",
+        roomType: {
+          name: "Deluxe Room",
+          branch: {
+            name: "Central Branch",
+            hotel: { name: "Test Hotel" },
+          },
+        },
+        payments: [],
+      },
+    ]);
+
+    const response = await request(app).get(
+      "/api/v1/bookings/user/user-test-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(bookingFindManyMock).toHaveBeenCalledOnce();
+  });
+roomFindUniqueMock.mockResolvedValue({
+  id: "room-test-1",
+  pricePerNight: 1200,
+  totalRooms: 10,
+});
+userFindUniqueMock.mockResolvedValue({
+  id: "user-test-1",
+});
+  it("creates a booking with valid data", async () => {
+    bookingCreateMock.mockResolvedValue({
+      id: "booking-test-2",
+      userId: "user-test-1",
+      roomTypeId: "room-test-1",
+      checkIn: new Date("2026-11-01T00:00:00.000Z"),
+      checkOut: new Date("2026-11-03T00:00:00.000Z"),
+      adults: 2,
+      children: 0,
+      roomQuantity: 1,
+      totalPrice: 2400,
+      status: "PENDING",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .send({
+        userId: "user-test-1",
+        roomTypeId: "room-test-1",
+        checkIn: "2026-11-01",
+        checkOut: "2026-11-03",
+        adults: 2,
+        children: 0,
+        roomQuantity: 1,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(bookingCreateMock).toHaveBeenCalledOnce();
+  });
+
+});
 
