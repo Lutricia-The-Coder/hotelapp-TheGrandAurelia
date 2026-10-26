@@ -23,6 +23,7 @@ const {
   bookingUpdateMock,
   bookingDeleteMock,
   bookingFindUniqueMock,
+    bookingAggregateMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -44,6 +45,7 @@ const {
   bookingCreateMock: vi.fn(),
   bookingUpdateMock: vi.fn(),
   bookingDeleteMock: vi.fn(),
+  bookingAggregateMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -77,6 +79,7 @@ vi.mock("./lib/prisma.js", () => ({
       create: bookingCreateMock,
       update: bookingUpdateMock,
       delete: bookingDeleteMock,
+      aggregate: bookingAggregateMock,
     },
   },
 }));
@@ -427,6 +430,36 @@ it("rejects an availability request when check-out is before check-in", async ()
   expect(response.status).toBe(400);
   expect(response.body.success).toBe(false);
 });
+
+
+it("returns available room quantity for valid dates", async () => {
+  roomFindUniqueMock.mockResolvedValue({
+    id: "room-test-1",
+    totalRooms: 10,
+  });
+
+  bookingAggregateMock.mockResolvedValue({
+    _sum: {
+      roomQuantity: 3,
+    },
+  });
+
+  const response = await request(app)
+    .get("/api/v1/rooms/room-test-1/availability")
+    .query({
+      checkIn: "2026-11-10",
+      checkOut: "2026-11-12",
+    });
+
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+  expect(response.body.data.totalRooms).toBe(10);
+  expect(response.body.data.bookedRooms).toBe(3);
+  expect(response.body.data.availableRooms).toBe(7);
+  expect(response.body.data.available).toBe(true);
+  expect(bookingAggregateMock).toHaveBeenCalledOnce();
+});
+
 
 });
 
