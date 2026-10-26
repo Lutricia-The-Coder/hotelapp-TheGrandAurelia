@@ -8,12 +8,14 @@ const {
   createMock,
   updateMock,
   deleteMock,
+  branchFindManyMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
   createMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
+  branchFindManyMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -24,6 +26,9 @@ vi.mock("./lib/prisma.js", () => ({
       create: createMock,
       update: updateMock,
       delete: deleteMock,
+    },
+    hotelBranch: {
+      findMany: branchFindManyMock,
     },
   },
 }));
@@ -156,3 +161,35 @@ it("deletes an existing hotel", async () => {
 
 
 });
+
+describe("Hotel Branches API", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns branches for a specific hotel", async () => {
+    branchFindManyMock.mockResolvedValue([
+      {
+        id: "branch-test-1",
+        name: "Central Branch",
+        address: "123 Main Street",
+        city: "Polokwane",
+        country: "South Africa",
+        hotelId: "hotel-test-1",
+        roomTypes: [],
+        amenities: [],
+      },
+    ]);
+
+    const response = await request(app).get(
+      "/api/v1/branches/hotel/hotel-test-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].name).toBe("Central Branch");
+    expect(branchFindManyMock).toHaveBeenCalledOnce();
+  });
+});
+
