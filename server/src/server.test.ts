@@ -407,6 +407,15 @@ describe("Room Types API", () => {
     expect(roomDeleteMock).toHaveBeenCalledOnce();
   });
 
+it("rejects an availability request with missing dates", async () => {
+  const response = await request(app).get(
+    "/api/v1/rooms/room-test-1/availability",
+  );
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+});
+
 });
 
 
