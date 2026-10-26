@@ -527,6 +527,18 @@ it("never returns negative available rooms when bookings exceed inventory", asyn
   expect(response.body.data.available).toBe(false);
 });
 
+it("rejects invalid date formats in availability requests", async () => {
+  const response = await request(app)
+    .get("/api/v1/rooms/room-test-1/availability")
+    .query({
+      checkIn: "not-a-date",
+      checkOut: "2026-11-12",
+    });
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+});
+
 
 });
 
