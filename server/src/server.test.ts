@@ -525,5 +525,21 @@ it("rejects cancellation of an already cancelled booking", async () => {
   expect(bookingUpdateMock).not.toHaveBeenCalled();
 });
 
+it("rejects cancellation of a completed booking", async () => {
+  bookingFindUniqueMock.mockResolvedValue({
+    id: "booking-test-1",
+    userId: "user-test-1",
+    status: "COMPLETED",
+  });
+
+  const response = await request(app).patch(
+    "/api/v1/bookings/booking-test-1/cancel",
+  );
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+  expect(bookingUpdateMock).not.toHaveBeenCalled();
+});
+
 });
 
