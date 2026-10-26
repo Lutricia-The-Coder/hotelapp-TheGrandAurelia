@@ -12,6 +12,7 @@ const {
   branchCreateMock,
   branchUpdateMock,
   branchDeleteMock,
+  roomFindManyMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   branchCreateMock: vi.fn(),
   branchUpdateMock: vi.fn(),
   branchDeleteMock: vi.fn(),
+  roomFindManyMock: vi.fn(),
 }));
 
 vi.mock("./lib/prisma.js", () => ({
@@ -38,6 +40,9 @@ vi.mock("./lib/prisma.js", () => ({
       create: branchCreateMock,
       update: branchUpdateMock,
       delete: branchDeleteMock,
+    },
+    roomType: {
+      findMany: roomFindManyMock,
     },
   },
 }));
@@ -270,4 +275,35 @@ describe("Hotel Branches API", () => {
   });
 
 });
+
+describe("Room Types API", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns room types for a specific branch", async () => {
+    roomFindManyMock.mockResolvedValue([
+      {
+        id: "room-test-1",
+        name: "Deluxe Room",
+        description: "A spacious deluxe room",
+        pricePerNight: 1200,
+        capacity: 2,
+        totalRooms: 10,
+        branchId: "branch-test-1",
+      },
+    ]);
+
+    const response = await request(app).get(
+      "/api/v1/rooms/branch/branch-test-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].name).toBe("Deluxe Room");
+    expect(roomFindManyMock).toHaveBeenCalledOnce();
+  });
+});
+
 
