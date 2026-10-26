@@ -460,6 +460,21 @@ it("returns available room quantity for valid dates", async () => {
   expect(bookingAggregateMock).toHaveBeenCalledOnce();
 });
 
+it("returns 404 when checking availability for a missing room type", async () => {
+  roomFindUniqueMock.mockResolvedValue(null);
+
+  const response = await request(app)
+    .get("/api/v1/rooms/nonexistent-room/availability")
+    .query({
+      checkIn: "2026-11-10",
+      checkOut: "2026-11-12",
+    });
+
+  expect(response.status).toBe(404);
+  expect(response.body.success).toBe(false);
+  expect(bookingAggregateMock).not.toHaveBeenCalled();
+});
+
 
 });
 
@@ -511,6 +526,16 @@ userFindUniqueMock.mockResolvedValue({
   id: "user-test-1",
 });
   it("creates a booking with valid data", async () => {
+    
+roomFindUniqueMock.mockResolvedValue({
+  id: "room-test-1",
+  pricePerNight: 1200,
+  totalRooms: 10,
+});
+userFindUniqueMock.mockResolvedValue({
+  id: "user-test-1",
+});
+
     bookingCreateMock.mockResolvedValue({
       id: "booking-test-2",
       userId: "user-test-1",
