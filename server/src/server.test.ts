@@ -475,6 +475,32 @@ it("returns 404 when checking availability for a missing room type", async () =>
   expect(bookingAggregateMock).not.toHaveBeenCalled();
 });
 
+it("returns zero available rooms when all rooms are booked", async () => {
+  roomFindUniqueMock.mockResolvedValue({
+    id: "room-test-1",
+    totalRooms: 10,
+  });
+
+  bookingAggregateMock.mockResolvedValue({
+    _sum: {
+      roomQuantity: 10,
+    },
+  });
+
+  const response = await request(app)
+    .get("/api/v1/rooms/room-test-1/availability")
+    .query({
+      checkIn: "2026-11-10",
+      checkOut: "2026-11-12",
+    });
+
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+  expect(response.body.data.bookedRooms).toBe(10);
+  expect(response.body.data.availableRooms).toBe(0);
+  expect(response.body.data.available).toBe(false);
+});
+
 
 });
 
