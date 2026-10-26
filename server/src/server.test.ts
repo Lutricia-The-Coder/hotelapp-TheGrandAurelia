@@ -416,6 +416,18 @@ it("rejects an availability request with missing dates", async () => {
   expect(response.body.success).toBe(false);
 });
 
+it("rejects an availability request when check-out is before check-in", async () => {
+  const response = await request(app)
+    .get("/api/v1/rooms/room-test-1/availability")
+    .query({
+      checkIn: "2026-11-10",
+      checkOut: "2026-11-08",
+    });
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+});
+
 });
 
 
