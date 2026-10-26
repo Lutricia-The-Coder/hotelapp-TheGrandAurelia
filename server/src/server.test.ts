@@ -509,6 +509,21 @@ userFindUniqueMock.mockResolvedValue({
     expect(bookingFindUniqueMock).toHaveBeenCalledOnce();
     expect(bookingUpdateMock).toHaveBeenCalledOnce();
   });
+it("rejects cancellation of an already cancelled booking", async () => {
+  bookingFindUniqueMock.mockResolvedValue({
+    id: "booking-test-1",
+    userId: "user-test-1",
+    status: "CANCELLED",
+  });
+
+  const response = await request(app).patch(
+    "/api/v1/bookings/booking-test-1/cancel",
+  );
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+  expect(bookingUpdateMock).not.toHaveBeenCalled();
+});
 
 });
 
