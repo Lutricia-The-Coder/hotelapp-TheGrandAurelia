@@ -22,6 +22,7 @@ const {
   bookingCreateMock,
   bookingUpdateMock,
   bookingDeleteMock,
+  bookingFindUniqueMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -39,6 +40,7 @@ const {
   roomFindUniqueMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
   bookingFindManyMock: vi.fn(),
+  bookingFindUniqueMock: vi.fn(),
   bookingCreateMock: vi.fn(),
   bookingUpdateMock: vi.fn(),
   bookingDeleteMock: vi.fn(),
@@ -71,6 +73,7 @@ vi.mock("./lib/prisma.js", () => ({
     },
     booking: {
       findMany: bookingFindManyMock,
+      findUnique: bookingFindUniqueMock,
       create: bookingCreateMock,
       update: bookingUpdateMock,
       delete: bookingDeleteMock,
@@ -482,6 +485,29 @@ userFindUniqueMock.mockResolvedValue({
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
     expect(bookingCreateMock).toHaveBeenCalledOnce();
+  });
+
+  it("cancels an existing pending booking", async () => {
+    bookingFindUniqueMock.mockResolvedValue({
+      id: "booking-test-1",
+      userId: "user-test-1",
+      status: "PENDING",
+    });
+
+    bookingUpdateMock.mockResolvedValue({
+      id: "booking-test-1",
+      userId: "user-test-1",
+      status: "CANCELLED",
+    });
+
+    const response = await request(app).patch(
+      "/api/v1/bookings/booking-test-1/cancel",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(bookingFindUniqueMock).toHaveBeenCalledOnce();
+    expect(bookingUpdateMock).toHaveBeenCalledOnce();
   });
 
 });
