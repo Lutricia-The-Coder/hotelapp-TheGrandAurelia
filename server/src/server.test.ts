@@ -2,17 +2,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-
-
-
-const { findManyMock, findUniqueMock, createMock, updateMock } = vi.hoisted(
-  () => ({
-    findManyMock: vi.fn(),
-    findUniqueMock: vi.fn(),
-    createMock: vi.fn(),
-    updateMock: vi.fn(),
-  }),
-);
+const {
+  findManyMock,
+  findUniqueMock,
+  createMock,
+  updateMock,
+  deleteMock,
+} = vi.hoisted(() => ({
+  findManyMock: vi.fn(),
+  findUniqueMock: vi.fn(),
+  createMock: vi.fn(),
+  updateMock: vi.fn(),
+  deleteMock: vi.fn(),
+}));
 
 vi.mock("./lib/prisma.js", () => ({
   default: {
@@ -21,9 +23,11 @@ vi.mock("./lib/prisma.js", () => ({
       findUnique: findUniqueMock,
       create: createMock,
       update: updateMock,
+      delete: deleteMock,
     },
   },
 }));
+
 
 import app from "./app.js";
 
@@ -132,6 +136,22 @@ it("updates an existing hotel", async () => {
   expect(response.body.success).toBe(true);
   expect(response.body.data.name).toBe("Updated Test Hotel");
   expect(updateMock).toHaveBeenCalledOnce();
+});
+
+it("deletes an existing hotel", async () => {
+  deleteMock.mockResolvedValue({
+    id: "hotel-test-1",
+    name: "Test Hotel",
+    description: "A hotel for automated testing",
+  });
+
+  const response = await request(app).delete(
+    "/api/v1/hotels/hotel-test-1",
+  );
+
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+  expect(deleteMock).toHaveBeenCalledOnce();
 });
 
 
