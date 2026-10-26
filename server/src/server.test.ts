@@ -541,5 +541,17 @@ it("rejects cancellation of a completed booking", async () => {
   expect(bookingUpdateMock).not.toHaveBeenCalled();
 });
 
+it("returns 404 when cancelling a booking that does not exist", async () => {
+  bookingFindUniqueMock.mockResolvedValue(null);
+
+  const response = await request(app).patch(
+    "/api/v1/bookings/nonexistent-booking/cancel",
+  );
+
+  expect(response.status).toBe(404);
+  expect(response.body.success).toBe(false);
+  expect(bookingUpdateMock).not.toHaveBeenCalled();
+});
+
 });
 
