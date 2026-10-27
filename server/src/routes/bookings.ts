@@ -66,18 +66,41 @@ const {
       });
       return;
     }
+    // Validate check-in and check-out dates
+    
+    const todayInSouthAfrica = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Johannesburg",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    if (checkIn.slice(0, 10) < todayInSouthAfrica) {
+      res.status(400).json({
+        success: false,
+        message: "Check-in date cannot be in the past",
+      });
+      return;
+    }
+
 
     const parsedCheckIn = new Date(checkIn);
     const parsedCheckOut = new Date(checkOut);
-
+// Validate date formats and ensure check-out is after check-in
+ 
     if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(checkIn) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(checkOut) ||
       Number.isNaN(parsedCheckIn.getTime()) ||
       Number.isNaN(parsedCheckOut.getTime()) ||
+      parsedCheckIn.toISOString().slice(0, 10) !== checkIn ||
+      parsedCheckOut.toISOString().slice(0, 10) !== checkOut ||
       parsedCheckOut <= parsedCheckIn
     ) {
       res.status(400).json({
         success: false,
-        message: "Check-out must be later than a valid check-in date",
+        message:
+          "Check-in and check-out must be valid dates in YYYY-MM-DD format, and check-out must be later than check-in.",
       });
       return;
     }
@@ -112,6 +135,15 @@ const {
       });
       return;
     }
+// Check if the requested room quantity exceeds the total available rooms
+
+    if (guestAdults + guestChildren > room.capacity * quantity) {
+      res.status(400).json({
+        success: false,
+        message: `This booking allows a maximum of ${room.capacity * quantity} guest(s) for the selected room quantity.`,
+      });
+      return;
+    }
 
     if (quantity > room.totalRooms) {
       res.status(400).json({
@@ -135,16 +167,66 @@ const {
         },
       },
       select: {
+        checkIn: true,
+        checkOut: true,
         roomQuantity: true,
       },
     });
 
-    const bookedRooms = overlappingBookings.reduce(
-      (total, booking) => total + booking.roomQuantity,
-      0,
-    );
+    const events: { time: number; change: number }[] = [];
 
-    const availableRooms = room.totalRooms - bookedRooms;
+    for (const booking of overlappingBookings) {
+      const occupiedFrom = Math.max(
+        booking.checkIn.getTime(),
+        parsedCheckIn.getTime(),
+      );
+
+      const occupiedUntil = Math.min(
+        booking.checkOut.getTime(),
+        parsedCheckOut.getTime(),
+      );
+
+      if (occupiedFrom < occupiedUntil) {
+        events.push({
+          time: occupiedFrom,
+          change: booking.roomQuantity,
+        });
+
+        events.push({
+          time: occupiedUntil,
+          change: -booking.roomQuantity,
+        });
+      }
+    }
+
+    events.sort((a, b) => a.time - b.time);
+
+    let currentBookedRooms = 0;
+    let maxBookedRooms = 0;
+    let index = 0;
+
+    while (index < events.length) {
+      const currentTime = events[index].time;
+      let changeAtTime = 0;
+
+      while (
+        index < events.length &&
+        events[index].time === currentTime
+      ) {
+        changeAtTime += events[index].change;
+        index++;
+      }
+
+      currentBookedRooms += changeAtTime;
+
+      maxBookedRooms = Math.max(
+        maxBookedRooms,
+        currentBookedRooms,
+      );
+    }
+
+    const availableRooms = room.totalRooms - maxBookedRooms;
+
 
     if (quantity > availableRooms) {
       res.status(409).json({
