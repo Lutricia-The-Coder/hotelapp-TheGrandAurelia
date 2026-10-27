@@ -1,14 +1,7 @@
 
 import { useEffect, useState } from "react";
 
-import {
-  API_BASE_URL,
-  createBooking,
-  getUserBookings,
-  loginUser,
-  registerUser,
-  type UserBooking,
-} from "./api";
+import {API_BASE_URL,createBooking,getUserBookings, cancelBooking, loginUser,registerUser,type UserBooking,} from "./api";
 import "./index.css";
 
 type Branch = {
@@ -80,6 +73,7 @@ const [bookingLoading, setBookingLoading] = useState(false);
 const [myBookings, setMyBookings] = useState<UserBooking[]>([]);
 const [myBookingsLoading, setMyBookingsLoading] = useState(false);
 const [myBookingsError, setMyBookingsError] = useState("");
+const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 const [showMyBookings, setShowMyBookings] = useState(false);
 
 
@@ -159,6 +153,44 @@ async function handleLoadMyBookings() {
     );
   } finally {
     setMyBookingsLoading(false);
+  }
+}
+
+async function handleCancelBooking(bookingId: string) {
+  const confirmed = window.confirm(
+    "Are you sure you want to cancel this booking?",
+  );
+
+  if (!confirmed) return;
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setMyBookingsError("Your session has expired. Please sign in again.");
+    return;
+  }
+
+  setCancellingBookingId(bookingId);
+  setMyBookingsError("");
+
+  try {
+    await cancelBooking(bookingId, token);
+
+    setMyBookings((currentBookings) =>
+      currentBookings.map((booking) =>
+        booking.id === bookingId
+          ? { ...booking, status: "CANCELLED" }
+          : booking,
+      ),
+    );
+  } catch (error) {
+    setMyBookingsError(
+      error instanceof Error
+        ? error.message
+        : "Failed to cancel booking.",
+    );
+  } finally {
+    setCancellingBookingId(null);
   }
 }
 
@@ -328,7 +360,15 @@ async function handleBookingSubmit(
   <button
     type="button"
     className="login-link sign-out-button"
-    onClick={handleLoadMyBookings}
+
+onClick={async () => {
+  await handleLoadMyBookings();
+
+  document.getElementById("my-bookings")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}}
     disabled={myBookingsLoading}
   >
     {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
@@ -881,8 +921,8 @@ async function handleBookingSubmit(
         </section>
         
 {showMyBookings && (
-  <section className="my-bookings-section">
-    <h2>My Bookings</h2>
+<section id="my-bookings" className="my-bookings-section">
+      <h2>My Bookings</h2>
     <p>Your reservations at The Grand Aurelia.</p>
 
     {myBookingsLoading && <p>Loading your bookings...</p>}
@@ -925,6 +965,21 @@ async function handleBookingSubmit(
             })}
           </p>
           <p>Status: {booking.status}</p>
+          
+{booking.status !== "CANCELLED" &&
+  booking.status !== "COMPLETED" && (
+    <button
+      type="button"
+      className="login-link sign-out-button"
+      onClick={() => handleCancelBooking(booking.id)}
+      disabled={cancellingBookingId === booking.id}
+    >
+      {cancellingBookingId === booking.id
+        ? "Cancelling..."
+        : "Cancel Booking"}
+    </button>
+  )}
+
         </article>
       ))}
   </section>

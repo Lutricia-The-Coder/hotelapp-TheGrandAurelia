@@ -67,6 +67,35 @@ export async function getUserBookings(
   return result.data ?? [];
 }
 
+export async function cancelBooking(
+  bookingId: string,
+  token: string,
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/bookings/${bookingId}/cancel`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to cancel booking.");
+  }
+
+  return {
+    success: true,
+    message: result.message || "Booking cancelled successfully.",
+  };
+}
+
 const API_BASE_URL = "http://localhost:3000/api/v1";
 export type CreateBookingInput = {
   checkIn: string;
