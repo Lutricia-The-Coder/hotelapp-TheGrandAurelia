@@ -643,6 +643,159 @@ userFindUniqueMock.mockResolvedValue({
     expect(bookingCreateMock).toHaveBeenCalledOnce();
   });
 
+// Additional test cases for booking creation and cancellation  
+  it("rejects a booking with a check-in date in the past", async () => {
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .set(authHeader())
+      .send({
+        roomTypeId: "room-test-1",
+        checkIn: "2000-01-01",
+        checkOut: "2000-01-03",
+        adults: 2,
+        children: 0,
+        roomQuantity: 1,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toBe(
+      "Check-in date cannot be in the past",
+    );
+    expect(roomFindUniqueMock).not.toHaveBeenCalled();
+    expect(bookingCreateMock).not.toHaveBeenCalled();
+  });
+
+  // Additional test cases for booking cancellation
+  
+  it("rejects an invalid calendar date", async () => {
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .set(authHeader())
+      .send({
+        roomTypeId: "room-test-1",
+        checkIn: "2027-02-30",
+        checkOut: "2027-03-03",
+        adults: 2,
+        children: 0,
+        roomQuantity: 1,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain(
+      "valid dates in YYYY-MM-DD format",
+    );
+    expect(roomFindUniqueMock).not.toHaveBeenCalled();
+    expect(bookingCreateMock).not.toHaveBeenCalled();
+  });
+
+  // Additional test cases for booking cancellation
+  
+  it("rejects a booking that exceeds room guest capacity", async () => {
+    roomFindUniqueMock.mockResolvedValue({
+      id: "room-test-1",
+      name: "Standard Room",
+      capacity: 2,
+      pricePerNight: 1203,
+      totalRooms: 10,
+    });
+
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .set(authHeader())
+      .send({
+        roomTypeId: "room-test-1",
+        checkIn: "2099-01-10",
+        checkOut: "2099-01-12",
+        adults: 3,
+        children: 0,
+        roomQuantity: 1,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("maximum of 2 guest(s)");
+    expect(roomFindUniqueMock).toHaveBeenCalledOnce();
+    expect(bookingCreateMock).not.toHaveBeenCalled();
+  });
+// Additional test cases for booking cancellation
+
+  it("rejects a booking when there are not enough rooms available", async () => {
+    roomFindUniqueMock.mockResolvedValue({
+      id: "room-test-1",
+      name: "Standard Room",
+      capacity: 2,
+      pricePerNight: 1203,
+      totalRooms: 10,
+    });
+
+    bookingFindManyMock.mockResolvedValue([
+      {
+        checkIn: new Date("2099-01-10T00:00:00.000Z"),
+        checkOut: new Date("2099-01-12T00:00:00.000Z"),
+        roomQuantity: 9,
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .set(authHeader())
+      .send({
+        roomTypeId: "room-test-1",
+        checkIn: "2099-01-10",
+        checkOut: "2099-01-12",
+        adults: 2,
+        children: 0,
+        roomQuantity: 2,
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("Only 1 room(s) available");
+    expect(bookingCreateMock).not.toHaveBeenCalled();
+  });
+// Additional test cases for booking cancellation
+
+  it("calculates availability correctly for bookings on different nights", async () => {
+    roomFindUniqueMock.mockResolvedValue({
+      id: "room-test-1",
+      name: "Standard Room",
+      capacity: 2,
+      pricePerNight: 1203,
+      totalRooms: 10,
+    });
+
+    bookingFindManyMock.mockResolvedValue([
+      {
+        checkIn: new Date("2099-01-10T00:00:00.000Z"),
+        checkOut: new Date("2099-01-11T00:00:00.000Z"),
+        roomQuantity: 6,
+      },
+      {
+        checkIn: new Date("2099-01-11T00:00:00.000Z"),
+        checkOut: new Date("2099-01-12T00:00:00.000Z"),
+        roomQuantity: 6,
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/v1/bookings")
+      .set(authHeader())
+      .send({
+        roomTypeId: "room-test-1",
+        checkIn: "2099-01-10",
+        checkOut: "2099-01-12",
+        adults: 2,
+        children: 0,
+        roomQuantity: 5,
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain("Only 4 room(s) available");
+    expect(bookingCreateMock).not.toHaveBeenCalled();
+  });
+
   it("cancels an existing pending booking", async () => {
     bookingFindUniqueMock.mockResolvedValue({
       id: "booking-test-1",
