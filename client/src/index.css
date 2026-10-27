@@ -1182,3 +1182,33 @@ p {
     gap: 12px;
   }
 }
+/* STATUS*/
+
+.booking-status {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.booking-status-pending {
+  color: #8a5a00;
+  background-color: #fff2cc;
+}
+
+.booking-status-confirmed {
+  color: #216e39;
+  background-color: #e2f5e8;
+}
+
+.booking-status-cancelled {
+  color: #a12626;
+  background-color: #fde8e8;
+}
+
+.booking-status-completed {
+  color: #385578;
+  background-color: #e8eef7;
+}
+

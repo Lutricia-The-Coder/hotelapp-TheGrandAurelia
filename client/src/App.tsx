@@ -73,6 +73,16 @@ const [bookingLoading, setBookingLoading] = useState(false);
 const [myBookings, setMyBookings] = useState<UserBooking[]>([]);
 const [myBookingsLoading, setMyBookingsLoading] = useState(false);
 const [myBookingsError, setMyBookingsError] = useState("");
+
+const [bookingConfirmation, setBookingConfirmation] = useState<{
+  id: string;
+  checkIn: string;
+  checkOut: string;
+  totalPrice: number | string;
+  roomTypeId: string;
+  userId: string;
+} | null>(null);
+
 const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 const [showMyBookings, setShowMyBookings] = useState(false);
 
@@ -256,7 +266,7 @@ async function handleBookingSubmit(
     if (!result.success || !result.data) {
       throw new Error(result.message || "Booking could not be completed.");
     }
-
+setBookingConfirmation(result.data);
     setBookingMessage(
       `Booking created successfully! Total: R${Number(result.data.totalPrice).toFixed(2)}`,
     );
@@ -885,14 +895,60 @@ onClick={async () => {
                   </p>
                 )}
 
-                {bookingMessage && (
-                  <p
-                    className="auth-feedback auth-feedback-success"
-                    role="status"
-                  >
-                    {bookingMessage}
-                  </p>
-                )}
+             
+{bookingMessage && (
+  <div className="booking-confirmation" role="status">
+    <p className="auth-feedback auth-feedback-success">
+      {bookingMessage}
+    </p>
+
+    {bookingConfirmation && (
+      <div className="booking-confirmation-details">
+        <h3>Booking Confirmation</h3>
+
+        <p>
+          <strong>Booking reference:</strong>{" "}
+          {bookingConfirmation.id}
+        </p>
+
+        <p>
+          <strong>Room:</strong>{" "}
+          {bookingRoom?.name ?? "Selected room"}
+        </p>
+
+        <p>
+          <strong>Check-in:</strong>{" "}
+          {new Date(bookingConfirmation.checkIn).toLocaleDateString(
+            "en-ZA",
+          )}
+        </p>
+
+        <p>
+          <strong>Check-out:</strong>{" "}
+          {new Date(bookingConfirmation.checkOut).toLocaleDateString(
+            "en-ZA",
+          )}
+        </p>
+
+        <p>
+          <strong>Rooms booked:</strong> {bookingQuantity}
+        </p>
+
+        <p>
+          <strong>Total price:</strong>{" "}
+          {Number(bookingConfirmation.totalPrice).toLocaleString(
+            "en-ZA",
+            {
+              style: "currency",
+              currency: "ZAR",
+            },
+          )}
+        </p>
+      </div>
+    )}
+  </div>
+)}
+
 
                 {!authUser && (
                   <p className="auth-description">
@@ -964,7 +1020,21 @@ onClick={async () => {
               currency: "ZAR",
             })}
           </p>
-          <p>Status: {booking.status}</p>
+
+<p
+  className={`booking-status booking-status-${booking.status.toLowerCase()}`}
+>
+  Status:{" "}
+  {booking.status === "PENDING"
+    ? "Pending confirmation"
+    : booking.status === "CONFIRMED"
+      ? "Confirmed"
+      : booking.status === "CANCELLED"
+        ? "Cancelled"
+        : booking.status === "COMPLETED"
+          ? "Completed"
+          : booking.status}
+</p>
           
 {booking.status !== "CANCELLED" &&
   booking.status !== "COMPLETED" && (
