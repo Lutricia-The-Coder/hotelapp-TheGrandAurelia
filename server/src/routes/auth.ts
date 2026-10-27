@@ -7,7 +7,7 @@ const router = Router();
 
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body ?? {};
+    const { title ,name, email, password } = req.body ?? {};
 
     if (
       typeof email !== "string" ||
@@ -21,11 +21,20 @@ router.post("/register", async (req, res) => {
       return;
     }
 
-    if (name !== undefined && typeof name !== "string") {
-      res.status(400).json({ error: "Name must be a string." });
-      return;
-    }
+const allowedTitles = ["Mr", "Mrs", "Ms", "Miss", "Dr", "Prof"];
 
+if (
+  title !== undefined &&
+  (typeof title !== "string" || !allowedTitles.includes(title))
+) {
+  res.status(400).json({ error: "Please select a valid title." });
+  return;
+}
+
+if (name !== undefined && typeof name !== "string") {
+  res.status(400).json({ error: "Name must be a string." });
+  return;
+}
     const normalizedEmail = email.trim().toLowerCase();
 
     const existingUser = await prisma.user.findUnique({
@@ -40,13 +49,15 @@ router.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
-      data: {
-        name: typeof name === "string" ? name.trim() || null : null,
-        email: normalizedEmail,
-        passwordHash,
-      },
+   data: {
+  title: typeof title === "string" ? title : null,
+  name: typeof name === "string" ? name.trim() || null : null,
+  email: normalizedEmail,
+  passwordHash,
+},
       select: {
         id: true,
+        title: true,
         name: true,
         email: true,
         role: true,
