@@ -2,6 +2,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { sendEmail } from "../lib/mailer.js";
 
 const router = Router();
 
