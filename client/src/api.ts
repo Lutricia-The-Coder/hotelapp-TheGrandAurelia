@@ -37,12 +37,12 @@ async function authRequest(
 }
 
 export async function registerUser(
-  title: string,
   name: string,
   email: string,
   password: string,
+  title: string,
 ): Promise<AuthResponse> {
-  return authRequest("register", { title, name, email, password });
+  return authRequest("register", { name, email, password, title });
 }
 
 export async function loginUser(

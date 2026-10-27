@@ -1014,7 +1014,17 @@ p {
   white-space: nowrap;
   transition: color 0.2s ease;
 }
+.sign-out-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
 
+.sign-out-button:hover {
+  color: #b6955b;
+}
 .login-link:hover {
   color: #b6955b;
 }

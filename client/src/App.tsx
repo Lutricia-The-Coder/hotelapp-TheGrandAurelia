@@ -33,6 +33,24 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
+  const [authUser, setAuthUser] = useState<{
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+} | null>(() => {
+  const savedUser = sessionStorage.getItem("hotelAuthUser");
+
+  if (!savedUser) return null;
+
+  try {
+    return JSON.parse(savedUser);
+  } catch {
+    sessionStorage.removeItem("hotelAuthUser");
+    sessionStorage.removeItem("hotelAuthToken");
+    return null;
+  }
+});
   const [authName, setAuthName] = useState("");
 const [authEmail, setAuthEmail] = useState("");
 const [authTitle, setAuthTitle] = useState("");
@@ -74,6 +92,7 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
 
       sessionStorage.setItem("hotelAuthToken", result.token);
       sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
+      setAuthUser(result.user);
 
       setAuthMessage(`Welcome${result.user.name ? `, ${result.user.name}` : ""}! You are signed in.`);
       setAuthPassword("");
@@ -88,7 +107,17 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
     setAuthLoading(false);
   }
 }
+function handleSignOut() {
+  sessionStorage.removeItem("hotelAuthToken");
+  sessionStorage.removeItem("hotelAuthUser");
 
+  setAuthUser(null);
+  setAuthMode(null);
+  setAuthMessage("");
+  setAuthError("");
+  setAuthPassword("");
+  setAuthConfirmPassword("");
+}
 
   useEffect(() => {
     async function loadData() {
@@ -169,20 +198,36 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
 
 
 <div className="header-actions">
- <a
-  className="login-link"
-  href="#auth"
-  onClick={(event) => {
-    event.preventDefault();
-    setAuthMode("login");
-  }}
->
-  Sign in
-</a>
+ {authUser ? (
+  <>
+    <span className="login-link">
+      Welcome, {authUser.name || authUser.email}
+    </span>
+    <button
+      type="button"
+      className="login-link sign-out-button"
+      onClick={handleSignOut}
+    >
+      Sign out
+    </button>
+  </>
+) : (
+    <a
+      className="login-link"
+      href="#auth"
+      onClick={(event) => {
+        event.preventDefault();
+        setAuthMode("login");
+      }}
+    >
+      Sign in
+    </a>
+  )}
   <a className="header-cta" href="#rooms">
     Explore Stays <span>↗</span>
   </a>
 </div>
+
 
       </header>
 
