@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { API_BASE_URL } from "./api";
+import { API_BASE_URL, loginUser, registerUser } from "./api";
 import "./index.css";
 
 type Branch = {
@@ -32,6 +32,63 @@ function App() {
   const [rooms, setRooms] = useState<Record<string, RoomType[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
+  const [authName, setAuthName] = useState("");
+const [authEmail, setAuthEmail] = useState("");
+const [authTitle, setAuthTitle] = useState("");
+const [authConfirmPassword, setAuthConfirmPassword] = useState("");
+const [authPassword, setAuthPassword] = useState("");
+const [authMessage, setAuthMessage] = useState("");
+const [authError, setAuthError] = useState("");
+const [authLoading, setAuthLoading] = useState(false);
+
+async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+  setAuthMessage("");
+  setAuthError("");
+  setAuthLoading(true);
+
+  try {
+    if (authMode === "register") {
+      if (authPassword !== authConfirmPassword) {
+  setAuthError("Your passwords do not match. Please try again.");
+  setAuthLoading(false);
+  return;
+}
+      const result = await registerUser(
+        authTitle,
+        authName.trim(),
+        authEmail.trim(),
+        authPassword,
+      );
+
+      setAuthMessage(result.message);
+      setAuthMode("login");
+      setAuthPassword("");
+    } else if (authMode === "login") {
+      const result = await loginUser(authEmail.trim(), authPassword);
+
+      if (!result.token || !result.user) {
+        throw new Error("Login response was incomplete. Please try again.");
+      }
+
+      sessionStorage.setItem("hotelAuthToken", result.token);
+      sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
+
+      setAuthMessage(`Welcome${result.user.name ? `, ${result.user.name}` : ""}! You are signed in.`);
+      setAuthPassword("");
+    }
+  } catch (err) {
+    setAuthError(
+      err instanceof Error
+        ? err.message
+        : "Something went wrong. Please try again.",
+    );
+  } finally {
+    setAuthLoading(false);
+  }
+}
+
 
   useEffect(() => {
     async function loadData() {
@@ -110,10 +167,184 @@ function App() {
           <a href="#about">Our Story</a>
         </nav>
 
-        <a className="header-cta" href="#rooms">Explore Stays <span>↗</span></a>
+
+<div className="header-actions">
+ <a
+  className="login-link"
+  href="#auth"
+  onClick={(event) => {
+    event.preventDefault();
+    setAuthMode("login");
+  }}
+>
+  Sign in
+</a>
+  <a className="header-cta" href="#rooms">
+    Explore Stays <span>↗</span>
+  </a>
+</div>
+
       </header>
 
       <main>
+        
+{authMode !== null && (
+  <section className="auth-section" id="auth">
+    <div className="auth-card">
+      <button
+        type="button"
+        className="auth-close"
+        onClick={() => {
+          setAuthMode(null);
+          setAuthMessage("");
+          setAuthError("");
+        }}
+        aria-label="Close authentication form"
+      >
+        ×
+      </button>
+
+      <p className="eyebrow">
+        <span /> THE GRAND AURELIA
+      </p>
+
+      <h2>
+        {authMode === "login" ? (
+          <>Welcome <em>back.</em></>
+        ) : (
+          <>Create your <em>account.</em></>
+        )}
+      </h2>
+
+      <p className="auth-description">
+        {authMode === "login"
+          ? "Sign in to continue your journey with us."
+          : "Join us and make your next stay special."}
+      </p>
+
+      <form onSubmit={handleAuthSubmit}>
+  
+{authMode === "register" && (
+  <>
+    <label className="auth-label">
+      Title
+      <select
+        value={authTitle}
+        onChange={(event) => setAuthTitle(event.target.value)}
+        required
+      >
+        <option value="">Select your title</option>
+        <option value="Mr">Mr</option>
+        <option value="Mrs">Mrs</option>
+        <option value="Ms">Ms</option>
+        <option value="Miss">Miss</option>
+        <option value="Dr">Dr</option>
+        <option value="Prof">Prof</option>
+      </select>
+    </label>
+
+    <label className="auth-label">
+      Full name
+      <input
+        type="text"
+        value={authName}
+        onChange={(event) => setAuthName(event.target.value)}
+        autoComplete="name"
+        placeholder="Your full name"
+        maxLength={100}
+        required
+      />
+    </label>
+  </>
+)}
+
+
+        <label className="auth-label">
+          Email address
+          <input
+            type="email"
+            value={authEmail}
+            onChange={(event) => setAuthEmail(event.target.value)}
+            autoComplete="email"
+            placeholder="you@example.com"
+            required
+          />
+        </label>
+
+        <label className="auth-label">
+          Password
+          <input
+            type="password"
+            value={authPassword}
+            onChange={(event) => setAuthPassword(event.target.value)}
+            autoComplete={authMode === "login" ? "current-password" : "new-password"}
+            placeholder={authMode === "register" ? "At least 8 characters" : "Your password"}
+            minLength={authMode === "register" ? 8 : undefined}
+            required
+          />
+        </label>
+
+{authMode === "register" && (
+  <label className="auth-label">
+    Confirm password
+    <input
+      type="password"
+      value={authConfirmPassword}
+      onChange={(event) => setAuthConfirmPassword(event.target.value)}
+      autoComplete="new-password"
+      placeholder="Enter your password again"
+      minLength={8}
+      required
+    />
+  </label>
+)}
+
+        {authError && (
+          <p className="auth-feedback auth-feedback-error" role="alert">
+            {authError}
+          </p>
+        )}
+
+        {authMessage && (
+          <p className="auth-feedback auth-feedback-success" role="status">
+            {authMessage}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="gold-button auth-submit"
+          disabled={authLoading}
+        >
+          {authLoading
+            ? "Please wait..."
+            : authMode === "login"
+              ? "Sign in"
+              : "Create account"}
+          {!authLoading && <span>→</span>}
+        </button>
+      </form>
+
+      <p className="auth-switch">
+        {authMode === "login"
+          ? "New to The Grand Aurelia?"
+          : "Already have an account?"}{" "}
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode(authMode === "login" ? "register" : "login");
+            setAuthMessage("");
+            setAuthError("");
+            setAuthConfirmPassword("");
+          }}
+        >
+          {authMode === "login" ? "Create account" : "Sign in"}
+        </button>
+      </p>
+    </div>
+  </section>
+)}
+
         <section className="hero" id="home">
           <div className="hero-image" role="img" aria-label="Peaceful luxury lodge surrounded by nature" />
           <div className="hero-shade" />
