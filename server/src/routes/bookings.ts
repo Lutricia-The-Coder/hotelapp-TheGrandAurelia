@@ -1,15 +1,17 @@
 
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
 // GET /api/v1/bookings/user/:userId
-router.get("/user/:userId", async (req, res) => {
-  try {
+router.get(
+  "/user/:userId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {  try {
     const bookings = await prisma.booking.findMany({
-      where: { userId: req.params.userId },
-      include: {
+where: { userId: req.user!.id },      include: {
         roomType: {
           include: {
             branch: {
@@ -40,29 +42,27 @@ router.get("/user/:userId", async (req, res) => {
 });
 
 // POST /api/v1/bookings
-router.post("/", async (req, res) => {
-  try {
-    const {
-      checkIn,
-      checkOut,
-      adults,
-      children,
-      roomQuantity,
-      roomTypeId,
-      userId,
-    } = req.body;
-
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {  try {
+const {
+  checkIn,
+  checkOut,
+  adults,
+  children,
+  roomQuantity,
+  roomTypeId,
+} = req.body;
     if (
       typeof checkIn !== "string" ||
       typeof checkOut !== "string" ||
       typeof roomTypeId !== "string" ||
-      !roomTypeId.trim() ||
-      typeof userId !== "string" ||
-      !userId.trim()
+      !roomTypeId.trim()
     ) {
       res.status(400).json({
         success: false,
-        message: "Valid checkIn, checkOut, roomTypeId, and userId are required",
+        message: "Valid checkIn, checkOut, and roomTypeId are required",
       });
       return;
     }
@@ -121,10 +121,9 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId.trim() },
-    });
-
+   const user = await prisma.user.findUnique({
+  where: { id: req.user!.id },
+});
     if (!user) {
       res.status(404).json({
         success: false,
@@ -168,11 +167,24 @@ router.post("/", async (req, res) => {
 });
 
 // PATCH /api/v1/bookings/:id/cancel
-router.patch("/:id/cancel", async (req, res) => {
+router.patch(
+  "/:id/cancel",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
   try {
-    const booking = await prisma.booking.findUnique({
-      where: { id: req.params.id },
-    });
+   const bookingId = req.params.id;
+
+if (typeof bookingId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid booking ID",
+  });
+  return;
+}
+
+const booking = await prisma.booking.findUnique({
+  where: { id: bookingId },
+});
 
     if (!booking) {
       res.status(404).json({
@@ -181,7 +193,13 @@ router.patch("/:id/cancel", async (req, res) => {
       });
       return;
     }
-
+if (booking.userId !== req.user!.id) {
+  res.status(403).json({
+    success: false,
+    message: "You are not allowed to cancel this booking",
+  });
+  return;
+}
     if (
       booking.status === "CANCELLED" ||
       booking.status === "COMPLETED"
@@ -193,11 +211,13 @@ router.patch("/:id/cancel", async (req, res) => {
       return;
     }
 
-    const updatedBooking = await prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: "CANCELLED" },
-    });
-
+const updatedBooking = await prisma.booking.update({
+  where: {
+    id: booking.id,
+    userId: req.user!.id,
+  },
+  data: { status: "CANCELLED" },
+});
     res.status(200).json({
       success: true,
       message: "Booking cancelled successfully",

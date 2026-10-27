@@ -1,7 +1,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
-
+import jwt from "jsonwebtoken";
 const {
   findManyMock,
   findUniqueMock,
@@ -47,7 +47,21 @@ const {
   bookingDeleteMock: vi.fn(),
   bookingAggregateMock: vi.fn(),
 }));
+const TEST_JWT_SECRET = "test-only-secret-for-booking-tests";
 
+process.env.JWT_SECRET = TEST_JWT_SECRET;
+
+function authHeader(userId = "user-test-1") {
+  const token = jwt.sign(
+    { sub: userId, role: "GUEST" },
+    TEST_JWT_SECRET,
+    { expiresIn: "1h" },
+  );
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
 vi.mock("./lib/prisma.js", () => ({
   default: {
     hotel: {
@@ -571,11 +585,10 @@ describe("Bookings API", () => {
         payments: [],
       },
     ]);
-
-    const response = await request(app).get(
-      "/api/v1/bookings/user/user-test-1",
-    );
-
+const response = await request(app)
+  .get("/api/v1/bookings/user/user-test-1")
+  .set(authHeader());
+    
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.data).toHaveLength(1);
@@ -614,17 +627,17 @@ userFindUniqueMock.mockResolvedValue({
     });
 
     const response = await request(app)
-      .post("/api/v1/bookings")
-      .send({
-        userId: "user-test-1",
-        roomTypeId: "room-test-1",
-        checkIn: "2026-11-01",
-        checkOut: "2026-11-03",
-        adults: 2,
-        children: 0,
-        roomQuantity: 1,
-      });
-
+  .post("/api/v1/bookings")
+  .set(authHeader())
+  .send({
+    userId: "user-test-1",
+    roomTypeId: "room-test-1",
+    checkIn: "2026-11-01",
+    checkOut: "2026-11-03",
+    adults: 2,
+    children: 0,
+    roomQuantity: 1,
+  });
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
     expect(bookingCreateMock).toHaveBeenCalledOnce();
@@ -642,10 +655,9 @@ userFindUniqueMock.mockResolvedValue({
       userId: "user-test-1",
       status: "CANCELLED",
     });
-
-    const response = await request(app).patch(
-      "/api/v1/bookings/booking-test-1/cancel",
-    );
+const response = await request(app)
+  .patch("/api/v1/bookings/booking-test-1/cancel")
+  .set(authHeader());
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
@@ -659,9 +671,9 @@ it("rejects cancellation of an already cancelled booking", async () => {
     status: "CANCELLED",
   });
 
-  const response = await request(app).patch(
-    "/api/v1/bookings/booking-test-1/cancel",
-  );
+const response = await request(app)
+  .patch("/api/v1/bookings/booking-test-1/cancel")
+  .set(authHeader());
 
   expect(response.status).toBe(400);
   expect(response.body.success).toBe(false);
@@ -675,9 +687,9 @@ it("rejects cancellation of a completed booking", async () => {
     status: "COMPLETED",
   });
 
-  const response = await request(app).patch(
-    "/api/v1/bookings/booking-test-1/cancel",
-  );
+ const response = await request(app)
+  .patch("/api/v1/bookings/booking-test-1/cancel")
+  .set(authHeader());
 
   expect(response.status).toBe(400);
   expect(response.body.success).toBe(false);
@@ -686,10 +698,9 @@ it("rejects cancellation of a completed booking", async () => {
 
 it("returns 404 when cancelling a booking that does not exist", async () => {
   bookingFindUniqueMock.mockResolvedValue(null);
-
-  const response = await request(app).patch(
-    "/api/v1/bookings/nonexistent-booking/cancel",
-  );
+const response = await request(app)
+  .patch("/api/v1/bookings/nonexistent-booking/cancel")
+  .set(authHeader());
 
   expect(response.status).toBe(404);
   expect(response.body.success).toBe(false);
