@@ -1,6 +1,14 @@
 
 import { useEffect, useState } from "react";
-import { API_BASE_URL, loginUser, registerUser } from "./api";
+
+import {
+  API_BASE_URL,
+  createBooking,
+  getUserBookings,
+  loginUser,
+  registerUser,
+  type UserBooking,
+} from "./api";
 import "./index.css";
 
 type Branch = {
@@ -59,6 +67,21 @@ const [authPassword, setAuthPassword] = useState("");
 const [authMessage, setAuthMessage] = useState("");
 const [authError, setAuthError] = useState("");
 const [authLoading, setAuthLoading] = useState(false);
+const [bookingRoom, setBookingRoom] = useState<RoomType | null>(null);
+const [bookingCheckIn, setBookingCheckIn] = useState("");
+const [bookingCheckOut, setBookingCheckOut] = useState("");
+const [bookingAdults, setBookingAdults] = useState(1);
+const [bookingChildren, setBookingChildren] = useState(0);
+const [bookingQuantity, setBookingQuantity] = useState(1);
+const [bookingMessage, setBookingMessage] = useState("");
+const [bookingError, setBookingError] = useState("");
+const [bookingLoading, setBookingLoading] = useState(false);
+
+const [myBookings, setMyBookings] = useState<UserBooking[]>([]);
+const [myBookingsLoading, setMyBookingsLoading] = useState(false);
+const [myBookingsError, setMyBookingsError] = useState("");
+const [showMyBookings, setShowMyBookings] = useState(false);
+
 
 async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
@@ -107,6 +130,38 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
     setAuthLoading(false);
   }
 }
+
+async function handleLoadMyBookings() {
+  setShowMyBookings(true);
+  if (!authUser) {
+    setMyBookingsError("Please sign in to view your bookings.");
+    return;
+  }
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setMyBookingsError("Your session has expired. Please sign in again.");
+    return;
+  }
+
+  setMyBookingsLoading(true);
+  setMyBookingsError("");
+
+  try {
+    const bookings = await getUserBookings(authUser.id, token);
+    setMyBookings(bookings);
+  } catch (error) {
+    setMyBookingsError(
+      error instanceof Error
+        ? error.message
+        : "Failed to load your bookings.",
+    );
+  } finally {
+    setMyBookingsLoading(false);
+  }
+}
+
 function handleSignOut() {
   sessionStorage.removeItem("hotelAuthToken");
   sessionStorage.removeItem("hotelAuthUser");
@@ -117,6 +172,71 @@ function handleSignOut() {
   setAuthError("");
   setAuthPassword("");
   setAuthConfirmPassword("");
+}
+
+async function handleBookingSubmit(
+  event: React.FormEvent<HTMLFormElement>,
+) {
+  event.preventDefault();
+  setBookingMessage("");
+  setBookingError("");
+
+  if (!authUser) {
+    setBookingError("Please sign in before making a booking.");
+    setAuthMode("login");
+    return;
+  }
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAuthUser(null);
+    setBookingError("Your session has expired. Please sign in again.");
+    setAuthMode("login");
+    return;
+  }
+
+  if (!bookingRoom) {
+    setBookingError("Please select a room.");
+    return;
+  }
+
+  if (bookingCheckOut <= bookingCheckIn) {
+    setBookingError("Check-out must be after check-in.");
+    return;
+  }
+
+  setBookingLoading(true);
+
+  try {
+    const result = await createBooking(
+      {
+        checkIn: bookingCheckIn,
+        checkOut: bookingCheckOut,
+        adults: bookingAdults,
+        children: bookingChildren,
+        roomQuantity: bookingQuantity,
+        roomTypeId: bookingRoom.id,
+      },
+      token,
+    );
+
+    if (!result.success || !result.data) {
+      throw new Error(result.message || "Booking could not be completed.");
+    }
+
+    setBookingMessage(
+      `Booking created successfully! Total: R${Number(result.data.totalPrice).toFixed(2)}`,
+    );
+  } catch (err) {
+    setBookingError(
+      err instanceof Error
+        ? err.message
+        : "Something went wrong while creating your booking.",
+    );
+  } finally {
+    setBookingLoading(false);
+  }
 }
 
   useEffect(() => {
@@ -199,18 +319,30 @@ function handleSignOut() {
 
 <div className="header-actions">
  {authUser ? (
-  <>
-    <span className="login-link">
-      Welcome, {authUser.name || authUser.email}
-    </span>
-    <button
-      type="button"
-      className="login-link sign-out-button"
-      onClick={handleSignOut}
-    >
-      Sign out
-    </button>
-  </>
+
+<>
+  <span className="login-link">
+    Welcome, {authUser.name || authUser.email}
+  </span>
+
+  <button
+    type="button"
+    className="login-link sign-out-button"
+    onClick={handleLoadMyBookings}
+    disabled={myBookingsLoading}
+  >
+    {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
+  </button>
+
+  <button
+    type="button"
+    className="login-link sign-out-button"
+    onClick={handleSignOut}
+  >
+    Sign out
+  </button>
+</>
+
 ) : (
     <a
       className="login-link"
@@ -557,12 +689,28 @@ function handleSignOut() {
                         <strong className="room-price">R{room.pricePerNight.toLocaleString("en-ZA")}</strong>
                         <span className="per-night"> / night</span>
                       </div>
-                      <a className="room-book-button" href="#booking" onClick={(event) => {
-                        event.preventDefault();
-                        alert("Booking form coming next. Your room details are ready!");
-                      }}>
-                        Book now <span>→</span>
-                      </a>
+                    
+<a
+  className="room-book-button"
+  href="#booking"
+  onClick={(event) => {
+    event.preventDefault();
+    setBookingRoom(room);
+    setBookingCheckIn("");
+    setBookingCheckOut("");
+    setBookingAdults(1);
+    setBookingChildren(0);
+    setBookingQuantity(1);
+    setBookingMessage("");
+    setBookingError("");
+    document.getElementById("booking")?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }}
+>
+  Book now <span>→</span>
+</a>
+
                     </div>
                   </div>
                 </article>
@@ -571,6 +719,159 @@ function handleSignOut() {
           </div>
         </section>
 
+        {bookingRoom && (
+          <section className="auth-section" id="booking-form">
+            <div className="auth-card booking-card">
+              <button
+                type="button"
+                className="auth-close"
+                onClick={() => {
+                  setBookingRoom(null);
+                  setBookingMessage("");
+                  setBookingError("");
+                }}
+                aria-label="Close booking form"
+              >
+                ×
+              </button>
+
+              <p className="eyebrow">
+                <span /> THE GRAND AURELIA
+              </p>
+
+              <h2>
+                Book your <em>stay.</em>
+              </h2>
+
+              <p className="auth-description">
+                {bookingRoom.name} · R
+                {bookingRoom.pricePerNight.toLocaleString("en-ZA")} per night
+              </p>
+
+              <form onSubmit={handleBookingSubmit}>
+                <label className="auth-label">
+                  Check-in
+                  <input
+                    type="date"
+                    value={bookingCheckIn}
+                    onChange={(event) =>
+                      setBookingCheckIn(event.target.value)
+                    }
+                    min={new Date().toLocaleDateString("en-CA")}
+                    required
+                  />
+                </label>
+
+                <label className="auth-label">
+                  Check-out
+                  <input
+                    type="date"
+                    value={bookingCheckOut}
+                    onChange={(event) =>
+                      setBookingCheckOut(event.target.value)
+                    }
+                    min={bookingCheckIn || new Date().toLocaleDateString("en-CA")}
+                    required
+                  />
+                </label>
+
+                <label className="auth-label">
+                  Adults
+                  <input
+                    type="number"
+                    min={1}
+                    max={bookingRoom.capacity * bookingQuantity}
+                    value={bookingAdults}
+                    onChange={(event) =>
+                      setBookingAdults(Number(event.target.value))
+                    }
+                    required
+                  />
+                </label>
+
+                <label className="auth-label">
+                  Children
+                  <input
+                    type="number"
+                    min={0}
+                    value={bookingChildren}
+                    onChange={(event) =>
+                      setBookingChildren(Number(event.target.value))
+                    }
+                    required
+                  />
+                </label>
+
+                <label className="auth-label">
+                  Rooms
+                  <select
+                    value={bookingQuantity}
+                    onChange={(event) =>
+                      setBookingQuantity(Number(event.target.value))
+                    }
+                    required
+                  >
+                    {Array.from(
+                      { length: bookingRoom.totalRooms },
+                      (_, index) => index + 1,
+                    ).map((quantity) => (
+                      <option key={quantity} value={quantity}>
+                        {quantity} {quantity === 1 ? "room" : "rooms"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {bookingCheckIn &&
+                  bookingCheckOut &&
+                  bookingCheckOut > bookingCheckIn && (
+                    <p className="auth-description">
+                      Estimated total: R
+                      {(
+                        bookingRoom.pricePerNight *
+                        Math.round(
+                          (new Date(`${bookingCheckOut}T00:00:00`).getTime() -
+                            new Date(`${bookingCheckIn}T00:00:00`).getTime()) /
+                            86400000,
+                        ) *
+                        bookingQuantity
+                      ).toLocaleString("en-ZA")}
+                    </p>
+                  )}
+
+                {bookingError && (
+                  <p className="auth-feedback auth-feedback-error" role="alert">
+                    {bookingError}
+                  </p>
+                )}
+
+                {bookingMessage && (
+                  <p
+                    className="auth-feedback auth-feedback-success"
+                    role="status"
+                  >
+                    {bookingMessage}
+                  </p>
+                )}
+
+                {!authUser && (
+                  <p className="auth-description">
+                    You'll need to sign in before confirming your booking.
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="gold-button auth-submit"
+                  disabled={bookingLoading}
+                >
+                  {bookingLoading ? "Creating booking..." : "Confirm booking"}
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
+
         <section className="closing-banner" id="booking">
           <div>
             <p className="eyebrow hero-eyebrow"><span /> YOUR NEXT CHAPTER STARTS HERE</p>
@@ -578,6 +879,57 @@ function handleSignOut() {
           </div>
           <a className="gold-button" href="#rooms">Find your stay <span>→</span></a>
         </section>
+        
+{showMyBookings && (
+  <section className="my-bookings-section">
+    <h2>My Bookings</h2>
+    <p>Your reservations at The Grand Aurelia.</p>
+
+    {myBookingsLoading && <p>Loading your bookings...</p>}
+
+    {myBookingsError && (
+      <p role="alert">{myBookingsError}</p>
+    )}
+
+    {!myBookingsLoading &&
+      !myBookingsError &&
+      myBookings.length === 0 && (
+        <p>You don't have any bookings yet.</p>
+      )}
+
+    {!myBookingsLoading &&
+      !myBookingsError &&
+      myBookings.map((booking) => (
+        <article key={booking.id} className="my-booking-card">
+          <h3>{booking.roomType.name}</h3>
+          <p>
+            Hotel: {booking.roomType.branch.hotel.name}
+          </p>
+          <p>
+            Branch: {booking.roomType.branch.name}
+          </p>
+          <p>
+            Check-in:{" "}
+            {new Date(booking.checkIn).toLocaleDateString("en-ZA")}
+          </p>
+          <p>
+            Check-out:{" "}
+            {new Date(booking.checkOut).toLocaleDateString("en-ZA")}
+          </p>
+          <p>Rooms: {booking.roomQuantity}</p>
+          <p>
+            Total:{" "}
+            {Number(booking.totalPrice).toLocaleString("en-ZA", {
+              style: "currency",
+              currency: "ZAR",
+            })}
+          </p>
+          <p>Status: {booking.status}</p>
+        </article>
+      ))}
+  </section>
+)}
+
       </main>
 
       <footer className="site-footer">

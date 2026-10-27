@@ -121,6 +121,39 @@ const {
       return;
     }
 
+    const overlappingBookings = await prisma.booking.findMany({
+      where: {
+        roomTypeId: room.id,
+        status: {
+          in: ["PENDING", "CONFIRMED"],
+        },
+        checkIn: {
+          lt: parsedCheckOut,
+        },
+        checkOut: {
+          gt: parsedCheckIn,
+        },
+      },
+      select: {
+        roomQuantity: true,
+      },
+    });
+
+    const bookedRooms = overlappingBookings.reduce(
+      (total, booking) => total + booking.roomQuantity,
+      0,
+    );
+
+    const availableRooms = room.totalRooms - bookedRooms;
+
+    if (quantity > availableRooms) {
+      res.status(409).json({
+        success: false,
+        message: `Only ${Math.max(0, availableRooms)} room(s) available for those dates.`,
+      });
+      return;
+    }
+
    const user = await prisma.user.findUnique({
   where: { id: req.user!.id },
 });

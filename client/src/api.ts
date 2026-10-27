@@ -1,5 +1,94 @@
 
+export async function createBooking(
+  booking: CreateBookingInput,
+  token: string,
+): Promise<BookingResponse> {
+  const response = await fetch(`${API_BASE_URL}/bookings`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(booking),
+  });
+
+  const result: BookingResponse = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || "Failed to create booking. Please try again.",
+    );
+  }
+
+  return result;
+}
+
+export type UserBooking = {
+  id: string;
+  checkIn: string;
+  checkOut: string;
+  totalPrice: number | string;
+  status: string;
+  roomQuantity: number;
+  roomType: {
+    name: string;
+    branch: {
+      name: string;
+      hotel: {
+        name: string;
+      };
+    };
+  };
+};
+
+export async function getUserBookings(
+  userId: string,
+  token: string,
+): Promise<UserBooking[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/bookings/user/${userId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    data?: UserBooking[];
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load your bookings.");
+  }
+
+  return result.data ?? [];
+}
+
 const API_BASE_URL = "http://localhost:3000/api/v1";
+export type CreateBookingInput = {
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  roomQuantity: number;
+  roomTypeId: string;
+};
+
+export type BookingResponse = {
+  success: boolean;
+  data?: {
+    id: string;
+    checkIn: string;
+    checkOut: string;
+    totalPrice: number | string;
+    roomTypeId: string;
+    userId: string;
+  };
+  message?: string;
+};
 
 export type AuthUser = {
   id: string;
