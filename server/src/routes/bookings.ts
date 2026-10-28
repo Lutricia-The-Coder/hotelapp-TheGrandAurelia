@@ -2,7 +2,7 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { sendEmail } from "../lib/mailer.js";
+import { sendEmail } from "../lib/mailer.js";  
 
 const router = Router();
 
@@ -268,6 +268,35 @@ const {
       },
     });
 
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Booking confirmation — The Grand Aurelia",
+        text: [
+          "Thank you for booking with The Grand Aurelia!",
+          "",
+          `Booking reference: ${booking.id}`,
+          `Room: ${room.name}`,
+          `Check-in: ${checkIn}`,
+          `Check-out: ${checkOut}`,
+          `Rooms booked: ${quantity}`,
+          `Adults: ${guestAdults}`,
+          `Children: ${guestChildren}`,
+          `Total price: ${Number(totalPrice).toLocaleString("en-ZA", {
+            style: "currency",
+            currency: "ZAR",
+          })}`,
+          "",
+          "We look forward to welcoming you!",
+        ].join("\n"),
+      });
+    } catch (emailError) {
+      console.error(
+        "Booking was created, but its confirmation email failed:",
+        emailError,
+      );
+    }
+ 
     res.status(201).json({
       success: true,
       data: booking,
