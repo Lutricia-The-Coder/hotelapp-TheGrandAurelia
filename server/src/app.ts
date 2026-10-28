@@ -7,6 +7,7 @@ import roomsRouter from "./routes/rooms.js";
 import bookingsRouter from "./routes/bookings.js";
 import authRouter from "./routes/auth.js";
 import favoritesRouter from "./routes/favorites.js";
+import reviewsRouter from "./routes/reviews.js";
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use("/api/v1/branches", branchesRouter);
 app.use("/api/v1/rooms", roomsRouter);
 app.use("/api/v1/bookings", bookingsRouter);
 app.use("/api/v1/favorites", favoritesRouter);
+app.use("/api/v1/reviews", reviewsRouter);
 app.use("/api/v1/auth", authRouter);
 
 app.get("/", (_req, res) => {

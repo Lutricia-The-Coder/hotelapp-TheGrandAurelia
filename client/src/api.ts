@@ -382,4 +382,70 @@ export async function removeFavoriteHotel(
   }
 }
 
+export type HotelReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string | null;
+  };
+};
+
+export type HotelReviewsResponse = {
+  success: boolean;
+  count: number;
+  averageRating: number | null;
+  data: HotelReview[];
+  message?: string;
+};
+
+export async function getHotelReviews(
+  hotelId: string,
+): Promise<HotelReviewsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/reviews/hotel/${encodeURIComponent(hotelId)}`,
+  );
+
+  const result: HotelReviewsResponse = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load hotel reviews.");
+  }
+
+  return result;
+}
+
+export async function submitHotelReview(
+  hotelId: string,
+  rating: number,
+  comment: string,
+  token: string,
+): Promise<HotelReview> {
+  const response = await fetch(
+    `${API_BASE_URL}/reviews/hotel/${encodeURIComponent(hotelId)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rating, comment }),
+    },
+  );
+
+  const result: {
+    success: boolean;
+    data?: HotelReview;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(result.message || "Failed to save your review.");
+  }
+
+  return result.data;
+}
+
 export { API_BASE_URL };
