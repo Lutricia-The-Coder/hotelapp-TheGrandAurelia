@@ -1,7 +1,5 @@
 
 import { useEffect, useState } from "react";
-
-
 import {
   API_BASE_URL,
   createBooking,
@@ -12,8 +10,12 @@ import {
   getAdminBookings,
   updateAdminBookingStatus,
   modifyAdminBooking,
+  getFavoriteHotels,
+  addFavoriteHotel,
+  removeFavoriteHotel,
   type UserBooking,
   type AdminBooking,
+  type FavoriteHotel,
 } from "./api";
 import "./index.css";
 
@@ -105,6 +107,14 @@ const [adminBookingsError, setAdminBookingsError] = useState("");
 const [adminBookingsMessage, setAdminBookingsMessage] = useState("");
 const [adminActionBookingId, setAdminActionBookingId] = useState<string | null>(null);
 const [showAdminBookings, setShowAdminBookings] = useState(false);
+
+const [favoriteHotelIds, setFavoriteHotelIds] = useState<string[]>([]);
+const [favoriteHotels, setFavoriteHotels] = useState<FavoriteHotel[]>([]);
+const [favoritesLoading, setFavoritesLoading] = useState(false);
+const [favoritesError, setFavoritesError] = useState("");
+const [favoritesMessage, setFavoritesMessage] = useState("");
+const [favoriteActionHotelId, setFavoriteActionHotelId] = useState<string | null>(null);
+const [showFavorites, setShowFavorites] = useState(false);
 
 
 async function handleLoadAdminBookings() {
@@ -253,6 +263,83 @@ async function handleModifyAdminBooking(booking: AdminBooking) {
     setAdminActionBookingId(null);
   }
 }
+//favorites 
+
+async function handleLoadFavorites() {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAuthMode("login");
+    setAuthError("Please sign in to view your favorites.");
+    document.getElementById("auth")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    return;
+  }
+setShowFavorites(true);
+  setFavoritesLoading(true);
+  setFavoritesError("");
+  setFavoritesMessage("");
+
+  try {
+    const saved = await getFavoriteHotels(token);
+    setFavoriteHotels(saved);
+    setFavoriteHotelIds(saved.map((favorite) => favorite.hotelId));
+  
+  } catch (err) {
+    setFavoritesError(
+      err instanceof Error ? err.message : "Failed to load favorites.",
+    );
+  } finally {
+    setFavoritesLoading(false);
+  }
+}
+
+async function handleToggleFavorite(hotel: Hotel) {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAuthMode("login");
+    setAuthError("Please sign in to save hotels to your favorites.");
+    document.getElementById("auth")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    return;
+  }
+
+  setFavoriteActionHotelId(hotel.id);
+  setFavoritesError("");
+  setFavoritesMessage("");
+
+  try {
+    const isFavorite = favoriteHotelIds.includes(hotel.id);
+
+    if (isFavorite) {
+      await removeFavoriteHotel(hotel.id, token);
+    } else {
+      await addFavoriteHotel(hotel.id, token);
+    }
+
+    const saved = await getFavoriteHotels(token);
+
+    setFavoriteHotels(saved);
+    setFavoriteHotelIds(saved.map((favorite) => favorite.hotelId));
+    setFavoritesMessage(
+      isFavorite
+        ? "Hotel removed from favorites."
+        : "Hotel added to favorites.",
+    );
+  } catch (err) {
+    setFavoritesError(
+      err instanceof Error ? err.message : "Failed to update favorites.",
+    );
+  } finally {
+    setFavoriteActionHotelId(null);
+  }
+}
+
 
 async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
@@ -551,6 +638,33 @@ setBookingConfirmation(result.data);
       {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
     </button>
 
+
+<button
+  type="button"
+  className="login-link sign-out-button"
+  onClick={async () => {
+    if (showFavorites) {
+      setShowFavorites(false);
+    } else {
+      await handleLoadFavorites();
+
+      window.requestAnimationFrame(() => {
+        document.getElementById("favorite-hotels")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+  }}
+  disabled={favoritesLoading}
+>
+  {favoritesLoading
+    ? "Loading Favourites..."
+    : showFavorites
+      ? "Hide Favourites"
+      : "My Favourites"}
+</button>
+
     {/* ADD THE ADMIN BUTTON HERE */}
     {authUser.role === "ADMIN" && (
       <button
@@ -841,7 +955,17 @@ setBookingConfirmation(result.data);
           {!loading && !error && hotels.length === 0 && (
             <p className="status-message">Our stays are coming soon.</p>
           )}
+{favoritesError && (
+  <p className="status-message error-message" role="alert">
+    Favourites error: {favoritesError}
+  </p>
+)}
 
+{favoritesMessage && (
+  <p className="status-message" role="status">
+    {favoritesMessage}
+  </p>
+)}
           <div className="destination-grid">
             {hotels.map((hotel) => (
               <article className="destination-card" key={hotel.id}>
@@ -855,6 +979,21 @@ setBookingConfirmation(result.data);
                 <div className="destination-content">
                   <p className="eyebrow destination-eyebrow">SOUTH AFRICA · MPUMALANGA</p>
                   <h3>{hotel.name}</h3>
+                  
+<button
+  type="button"
+  className="login-link sign-out-button"
+  aria-pressed={favoriteHotelIds.includes(hotel.id)}
+  onClick={() => handleToggleFavorite(hotel)}
+  disabled={favoriteActionHotelId === hotel.id}
+>
+  {favoriteActionHotelId === hotel.id
+    ? "Saving..."
+    : favoriteHotelIds.includes(hotel.id)
+      ? "♥ Saved to Favourites"
+      : "♡ Add to Favourites"}
+</button>
+
                   <p className="destination-description">
                     {hotel.description || "A thoughtful stay, designed around you."}
                   </p>
@@ -889,6 +1028,64 @@ setBookingConfirmation(result.data);
             ))}
           </div>
         </section>
+
+{authUser && showFavorites && (
+  <section
+    id="favorite-hotels"
+    className="my-bookings-section"
+  >
+    <h2>My Favourites</h2>
+    <p>Your saved stays at The Grand Aurelia.</p>
+
+    {favoritesError && (
+      <p role="alert">{favoritesError}</p>
+    )}
+
+    {favoritesMessage && (
+      <p role="status">{favoritesMessage}</p>
+    )}
+
+    {favoritesLoading && <p>Loading Favourites...</p>}
+
+    {!favoritesLoading &&
+      !favoritesError &&
+      favoriteHotels.length === 0 && (
+        <p>You haven't saved any hotels yet.</p>
+      )}
+
+    {!favoritesLoading &&
+      favoriteHotels.map((favorite) => (
+        <article
+          key={favorite.hotelId}
+          className="my-booking-card"
+        >
+          <h3>{favorite.hotel.name}</h3>
+
+          <p>
+            {favorite.hotel.description ||
+              "A thoughtful stay, designed around you."}
+          </p>
+
+          <button
+            type="button"
+            className="login-link sign-out-button"
+            disabled={favoriteActionHotelId === favorite.hotelId}
+            onClick={() =>
+              handleToggleFavorite({
+                id: favorite.hotel.id,
+                name: favorite.hotel.name,
+                description: favorite.hotel.description,
+              })
+            }
+          >
+            {favoriteActionHotelId === favorite.hotelId
+              ? "Removing..."
+              : "Remove from Favourites"}
+          </button>
+        </article>
+      ))}
+  </section>
+)}
 
         <section className="rooms-section" id="rooms">
           <div className="section-heading">

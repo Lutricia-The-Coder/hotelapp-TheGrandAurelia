@@ -303,4 +303,83 @@ export async function modifyAdminBooking(
   }
 }
 
+export type FavoriteHotel = {
+  hotelId: string;
+  hotel: {
+    id: string;
+    name: string;
+    description?: string | null;
+  };
+};
+
+export async function getFavoriteHotels(
+  token: string,
+): Promise<FavoriteHotel[]> {
+  const response = await fetch(`${API_BASE_URL}/favorites`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result: {
+    success: boolean;
+    data?: FavoriteHotel[];
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load favorites.");
+  }
+
+  return result.data ?? [];
+}
+
+export async function addFavoriteHotel(
+  hotelId: string,
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/favorites/${encodeURIComponent(hotelId)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to add favorite.");
+  }
+}
+
+export async function removeFavoriteHotel(
+  hotelId: string,
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/favorites/${encodeURIComponent(hotelId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to remove favorite.");
+  }
+}
+
 export { API_BASE_URL };
