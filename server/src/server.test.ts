@@ -62,6 +62,20 @@ function authHeader(userId = "user-test-1") {
     Authorization: `Bearer ${token}`,
   };
 }
+// Mock the prisma client to use the hoisted mocks
+
+function adminAuthHeader(userId = "admin-test-1") {
+  const token = jwt.sign(
+    { sub: userId, role: "ADMIN" },
+    TEST_JWT_SECRET,
+    { expiresIn: "1h" },
+  );
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 vi.mock("./lib/prisma.js", () => ({
   default: {
     hotel: {
@@ -176,6 +190,7 @@ it("creates a hotel with valid data", async () => {
 
   const response = await request(app)
     .post("/api/v1/hotels")
+     .set(adminAuthHeader())
     .send({
       name: "New Test Hotel",
       description: "A newly created test hotel",
@@ -197,6 +212,7 @@ it("updates an existing hotel", async () => {
 
   const response = await request(app)
     .put("/api/v1/hotels/hotel-test-1")
+    .set(adminAuthHeader())
     .send({
       name: "Updated Test Hotel",
       description: "Updated hotel description",
@@ -217,8 +233,8 @@ it("deletes an existing hotel", async () => {
 
   const response = await request(app).delete(
     "/api/v1/hotels/hotel-test-1",
-  );
-
+  )
+    .set(adminAuthHeader());
   expect(response.status).toBe(200);
   expect(response.body.success).toBe(true);
   expect(deleteMock).toHaveBeenCalledOnce();
@@ -269,6 +285,7 @@ describe("Hotel Branches API", () => {
 
     const response = await request(app)
       .post("/api/v1/branches")
+       .set(adminAuthHeader())
       .send({
         name: "New Central Branch",
         address: "456 Main Street",
@@ -295,6 +312,7 @@ describe("Hotel Branches API", () => {
 
     const response = await request(app)
       .put("/api/v1/branches/branch-test-1")
+      .set(adminAuthHeader())
       .send({
         name: "Updated Central Branch",
         address: "789 Main Street",
@@ -318,8 +336,8 @@ describe("Hotel Branches API", () => {
 
     const response = await request(app).delete(
       "/api/v1/branches/branch-test-1",
-    );
-
+    )
+      .set(adminAuthHeader());
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(branchDeleteMock).toHaveBeenCalledOnce();
@@ -369,6 +387,7 @@ describe("Room Types API", () => {
 
     const response = await request(app)
       .post("/api/v1/rooms")
+       .set(adminAuthHeader())
       .send({
         name: "Family Suite",
         description: "A spacious family suite",
@@ -397,6 +416,7 @@ describe("Room Types API", () => {
 
     const response = await request(app)
       .put("/api/v1/rooms/room-test-1")
+       .set(adminAuthHeader())
       .send({
         name: "Updated Deluxe Room",
         pricePerNight: 1500,
@@ -417,8 +437,8 @@ describe("Room Types API", () => {
 
     const response = await request(app).delete(
       "/api/v1/rooms/room-test-1",
-    );
-
+    )
+      .set(adminAuthHeader());
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(roomDeleteMock).toHaveBeenCalledOnce();

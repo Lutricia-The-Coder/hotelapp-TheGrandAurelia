@@ -1,6 +1,7 @@
 
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get("/branch/:branchId", async (req, res) => {
   }
 });
 // POST /api/v1/rooms
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, description, capacity, pricePerNight, totalRooms, branchId } =
       req.body;
@@ -101,7 +102,16 @@ router.post("/", async (req, res) => {
 });
 
 // PUT /api/v1/rooms/:id
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
+  const branchId = req.params.id;
+
+if (typeof branchId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid branch ID",
+  });
+  return;
+}
   try {
     const {
       name,
@@ -187,8 +197,7 @@ router.put("/:id", async (req, res) => {
     }
 
     const room = await prisma.roomType.update({
-      where: { id: req.params.id },
-      data,
+where: { id: branchId },      data,
     });
 
     res.status(200).json({
@@ -297,11 +306,19 @@ router.get("/:id/availability", async (req, res) => {
 });
 
 // DELETE /api/v1/rooms/:id
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  const branchId = req.params.id;
+
+if (typeof branchId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid branch ID",
+  });
+  return;
+}
   try {
     const room = await prisma.roomType.delete({
-      where: { id: req.params.id },
-    });
+where: { id: branchId },    });
 
     res.status(200).json({
       success: true,

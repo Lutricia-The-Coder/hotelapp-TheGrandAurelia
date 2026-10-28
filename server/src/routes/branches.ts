@@ -1,5 +1,6 @@
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -36,8 +37,7 @@ router.get("/hotel/:hotelId", async (req, res) => {
 
 
 // POST /api/v1/branches
-router.post("/", async (req, res) => {
-  try {
+router.post("/", requireAuth, requireAdmin, async (req, res) => {  try {
     const { name, address, city, country, hotelId } = req.body;
 
     if (
@@ -79,8 +79,16 @@ router.post("/", async (req, res) => {
 });
 
 // PUT /api/v1/branches/:id
-router.put("/:id", async (req, res) => {
-  try {
+router.put("/:id", requireAuth, requireAdmin, async (req, res) => { 
+  const branchId = req.params.id;
+
+if (typeof branchId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid branch ID",
+  });
+  return;
+} try {
     const { name, address, city, country, phone, checkInTime, checkOutTime, cancellationPolicy } =
       req.body;
 
@@ -143,7 +151,7 @@ router.put("/:id", async (req, res) => {
     }
 
     const branch = await prisma.hotelBranch.update({
-      where: { id: req.params.id },
+      where: { id: branchId },
       data,
     });
 
@@ -175,11 +183,19 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE /api/v1/branches/:id
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
+  const branchId = req.params.id;
+
+if (typeof branchId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid branch ID",
+  });
+  return;
+}
   try {
     const branch = await prisma.hotelBranch.delete({
-      where: { id: req.params.id },
-    });
+where: { id: branchId },    });
 
     res.status(200).json({
       success: true,

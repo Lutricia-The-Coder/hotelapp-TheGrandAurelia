@@ -1,14 +1,24 @@
 
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
+
 
 const router = Router();
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
+    const hotelId = req.params.id;
+
+if (typeof hotelId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid hotel ID",
+  });
+  return;
+}
     const hotel = await prisma.hotel.delete({
-      where: { id: req.params.id },
-    });
+where: { id: hotelId },    });
 
     res.status(200).json({
       success: true,
@@ -37,8 +47,8 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
-  try {
+router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
     const { name, description } = req.body;
 
     if (name === undefined && description === undefined) {
@@ -71,10 +81,18 @@ router.put("/:id", async (req, res) => {
       });
       return;
     }
+const hotelId = req.params.id;
 
+if (typeof hotelId !== "string") {
+  res.status(400).json({
+    success: false,
+    message: "Invalid hotel ID",
+  });
+  return;
+}
     const hotel = await prisma.hotel.update({
-      where: { id: req.params.id },
-      data: {
+where: { id: hotelId },     
+ data: {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined
           ? { description: description?.trim() || null }
@@ -109,7 +127,7 @@ router.put("/:id", async (req, res) => {
 });
 
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, description } = req.body;
 
