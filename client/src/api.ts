@@ -180,4 +180,127 @@ export async function checkApiHealth() {
   return response.json();
 }
 
+export type AdminBooking = {
+  id: string;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  roomQuantity: number;
+  totalPrice: number | string;
+  status: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+    title: string | null;
+  };
+  roomType: {
+    id: string;
+    name: string;
+    capacity: number;
+    pricePerNight: number | string;
+    branch: {
+      id: string;
+      name: string;
+      address: string;
+      city: string;
+      hotel: {
+        id: string;
+        name: string;
+      };
+    };
+  };
+  payments: {
+    id: string;
+    amount: number | string;
+    currency: string;
+    status: string;
+    provider: string;
+  }[];
+};
+
+export async function getAdminBookings(
+  token: string,
+): Promise<AdminBooking[]> {
+  const response = await fetch(`${API_BASE_URL}/bookings/admin`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result: {
+    success: boolean;
+    data?: AdminBooking[];
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load reservations.");
+  }
+
+  return result.data ?? [];
+}
+
+export async function updateAdminBookingStatus(
+  bookingId: string,
+  status: "CONFIRMED" | "CANCELLED",
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/bookings/admin/${encodeURIComponent(bookingId)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to update reservation.");
+  }
+}
+
+export async function modifyAdminBooking(
+  bookingId: string,
+  changes: {
+    checkIn?: string;
+    checkOut?: string;
+    adults?: number;
+    children?: number;
+    roomQuantity?: number;
+  },
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/bookings/admin/${encodeURIComponent(bookingId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(changes),
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to modify reservation.");
+  }
+}
+
 export { API_BASE_URL };

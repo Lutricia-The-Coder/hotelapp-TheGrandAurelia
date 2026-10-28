@@ -1,8 +1,11 @@
 
 import { Router } from "express";
 import prisma from "../lib/prisma.js";
-import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { sendEmail } from "../lib/mailer.js";  
+import {
+  requireAuth,
+  requireAdmin,
+  type AuthenticatedRequest,
+} from "../middleware/auth.js";import { sendEmail } from "../lib/mailer.js";  
 
 const router = Router();
 
@@ -41,6 +44,421 @@ where: { userId: req.user!.id },      include: {
     });
   }
 });
+
+
+ // GET /api/v1/bookings/admin
+router.get(
+  "/admin",
+  requireAuth,
+  requireAdmin,
+  async (_req, res) => {
+    try {
+      const bookings = await prisma.booking.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              title: true,
+            },
+          },
+          roomType: {
+            include: {
+              branch: {
+                include: {
+                  hotel: true,
+                },
+              },
+            },
+          },
+          payments: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        count: bookings.length,
+        data: bookings,
+      });
+    } catch (error) {
+      console.error("Failed to fetch admin bookings:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch reservations",
+      });
+    }
+  },
+);
+
+
+ // PATCH /api/v1/bookings/admin/:id/status
+router.patch(
+  "/admin/:id/status",
+  requireAuth,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const bookingId = req.params.id;
+      const { status } = req.body ?? {};
+
+      if (typeof bookingId !== "string") {
+        res.status(400).json({
+          success: false,
+          message: "Invalid booking ID",
+        });
+        return;
+      }
+
+      if (status !== "CONFIRMED" && status !== "CANCELLED") {
+        res.status(400).json({
+          success: false,
+          message: "Status must be CONFIRMED or CANCELLED",
+        });
+        return;
+      }
+
+      const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+      });
+
+      if (!booking) {
+        res.status(404).json({
+          success: false,
+          message: "Booking not found",
+        });
+        return;
+      }
+
+      if (
+        booking.status === "CANCELLED" ||
+        booking.status === "COMPLETED"
+      ) {
+        res.status(400).json({
+          success: false,
+          message: `A ${booking.status.toLowerCase()} booking cannot be changed`,
+        });
+        return;
+      }
+
+      const updatedBooking = await prisma.booking.update({
+        where: { id: bookingId },
+        data: { status },
+      });
+
+      res.status(200).json({
+        success: true,
+        message:
+          status === "CONFIRMED"
+            ? "Booking confirmed successfully"
+            : "Booking cancelled successfully",
+        data: updatedBooking,
+      });
+    } catch (error) {
+      console.error("Failed to update booking status:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to update booking status",
+      });
+    }
+  },
+);
+
+router.patch(
+  "/admin/:id",
+  requireAuth,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const bookingId = req.params.id;
+      const body = req.body ?? {};
+
+      if (typeof bookingId !== "string") {
+        res.status(400).json({
+          success: false,
+          message: "Invalid booking ID",
+        });
+        return;
+      }
+
+      const existing = await prisma.booking.findUnique({
+        where: { id: bookingId },
+      });
+
+      if (!existing) {
+        res.status(404).json({
+          success: false,
+          message: "Booking not found",
+        });
+        return;
+      }
+
+      if (
+        existing.status === "CANCELLED" ||
+        existing.status === "COMPLETED"
+      ) {
+        res.status(400).json({
+          success: false,
+          message: `A ${existing.status.toLowerCase()} booking cannot be modified`,
+        });
+        return;
+      }
+
+      const isDateOnly = (value: unknown): value is string => {
+        if (
+          typeof value !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(value)
+        ) {
+          return false;
+        }
+
+        const parsed = new Date(value);
+
+        return (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        );
+      };
+
+      const checkIn =
+        body.checkIn === undefined
+          ? existing.checkIn.toISOString().slice(0, 10)
+          : body.checkIn;
+
+      const checkOut =
+        body.checkOut === undefined
+          ? existing.checkOut.toISOString().slice(0, 10)
+          : body.checkOut;
+
+      const adults =
+        body.adults === undefined ? existing.adults : body.adults;
+
+      const children =
+        body.children === undefined
+          ? existing.children
+          : body.children;
+
+      const quantity =
+        body.roomQuantity === undefined
+          ? existing.roomQuantity
+          : body.roomQuantity;
+
+      if (
+        !isDateOnly(checkIn) ||
+        !isDateOnly(checkOut) ||
+        new Date(checkOut) <= new Date(checkIn)
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Valid check-in and check-out dates are required",
+        });
+        return;
+      }
+
+      if (body.checkIn !== undefined) {
+        const today = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Africa/Johannesburg",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date());
+
+        if (checkIn < today) {
+          res.status(400).json({
+            success: false,
+            message: "Check-in date cannot be in the past",
+          });
+          return;
+        }
+      }
+
+      if (
+        !Number.isInteger(adults) ||
+        adults < 1 ||
+        !Number.isInteger(children) ||
+        children < 0 ||
+        !Number.isInteger(quantity) ||
+        quantity < 1
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid guest counts or room quantity",
+        });
+        return;
+      }
+
+      const room = await prisma.roomType.findUnique({
+        where: { id: existing.roomTypeId },
+      });
+
+      if (!room) {
+        res.status(404).json({
+          success: false,
+          message: "Room type not found",
+        });
+        return;
+      }
+
+      if (adults + children > room.capacity * quantity) {
+        res.status(400).json({
+          success: false,
+          message: `This booking allows a maximum of ${room.capacity * quantity} guest(s).`,
+        });
+        return;
+      }
+
+      const parsedCheckIn = new Date(checkIn);
+      const parsedCheckOut = new Date(checkOut);
+
+      const overlappingBookings = await prisma.booking.findMany({
+        where: {
+          roomTypeId: room.id,
+          id: { not: bookingId },
+          status: { in: ["PENDING", "CONFIRMED"] },
+          checkIn: { lt: parsedCheckOut },
+          checkOut: { gt: parsedCheckIn },
+        },
+        select: {
+          checkIn: true,
+          checkOut: true,
+          roomQuantity: true,
+        },
+      });
+
+      const events: { time: number; change: number }[] = [];
+
+      for (const booking of overlappingBookings) {
+        const from = Math.max(
+          booking.checkIn.getTime(),
+          parsedCheckIn.getTime(),
+        );
+
+        const until = Math.min(
+          booking.checkOut.getTime(),
+          parsedCheckOut.getTime(),
+        );
+
+        if (from < until) {
+          events.push(
+            { time: from, change: booking.roomQuantity },
+            { time: until, change: -booking.roomQuantity },
+          );
+        }
+      }
+
+      events.sort((a, b) => a.time - b.time);
+
+      let currentRooms = 0;
+      let maximumBookedRooms = 0;
+      let index = 0;
+
+      while (index < events.length) {
+        const time = events[index].time;
+        let change = 0;
+
+        while (
+          index < events.length &&
+          events[index].time === time
+        ) {
+          change += events[index].change;
+          index++;
+        }
+
+        currentRooms += change;
+        maximumBookedRooms = Math.max(
+          maximumBookedRooms,
+          currentRooms,
+        );
+      }
+
+      const availableRooms = Math.max(
+        0,
+        room.totalRooms - maximumBookedRooms,
+      );
+
+      if (quantity > availableRooms) {
+        res.status(409).json({
+          success: false,
+          message: `Only ${availableRooms} room(s) available for those dates.`,
+        });
+        return;
+      }
+
+      const nights = Math.round(
+        (parsedCheckOut.getTime() - parsedCheckIn.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+
+      const totalPrice =
+        Number(room.pricePerNight) * nights * quantity;
+
+      const updatedBooking = await prisma.booking.update({
+        where: { id: bookingId },
+        data: {
+          checkIn: parsedCheckIn,
+          checkOut: parsedCheckOut,
+          adults,
+          children,
+          roomQuantity: quantity,
+          totalPrice,
+        },
+      });
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: existing.userId },
+          select: { email: true, name: true },
+        });
+
+        if (user?.email) {
+          await sendEmail({
+            to: user.email,
+            subject: "Your booking has been updated — The Grand Aurelia",
+            text: [
+              `Hello ${user.name || "Guest"},`,
+              "",
+              "Your reservation has been updated by our team.",
+              `Booking reference: ${updatedBooking.id}`,
+              `Check-in: ${checkIn}`,
+              `Check-out: ${checkOut}`,
+              `Rooms booked: ${quantity}`,
+              `Adults: ${adults}`,
+              `Children: ${children}`,
+              `Updated total: ${totalPrice.toLocaleString("en-ZA", {
+                style: "currency",
+                currency: "ZAR",
+              })}`,
+            ].join("\n"),
+          });
+        }
+      } catch (emailError) {
+        console.error(
+          "Booking was updated, but its notification email failed:",
+          emailError,
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Booking updated successfully",
+        data: updatedBooking,
+      });
+    } catch (error) {
+      console.error("Failed to modify booking:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to modify booking",
+      });
+    }
+  },
+);
+
 
 // POST /api/v1/bookings
 router.post(

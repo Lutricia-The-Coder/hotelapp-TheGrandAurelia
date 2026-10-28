@@ -1,7 +1,20 @@
 
 import { useEffect, useState } from "react";
 
-import {API_BASE_URL,createBooking,getUserBookings, cancelBooking, loginUser,registerUser,type UserBooking,} from "./api";
+
+import {
+  API_BASE_URL,
+  createBooking,
+  getUserBookings,
+  cancelBooking,
+  loginUser,
+  registerUser,
+  getAdminBookings,
+  updateAdminBookingStatus,
+  modifyAdminBooking,
+  type UserBooking,
+  type AdminBooking,
+} from "./api";
 import "./index.css";
 
 type Branch = {
@@ -86,6 +99,160 @@ const [bookingConfirmation, setBookingConfirmation] = useState<{
 const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 const [showMyBookings, setShowMyBookings] = useState(false);
 
+const [adminBookings, setAdminBookings] = useState<AdminBooking[]>([]);
+const [adminBookingsLoading, setAdminBookingsLoading] = useState(false);
+const [adminBookingsError, setAdminBookingsError] = useState("");
+const [adminBookingsMessage, setAdminBookingsMessage] = useState("");
+const [adminActionBookingId, setAdminActionBookingId] = useState<string | null>(null);
+const [showAdminBookings, setShowAdminBookings] = useState(false);
+
+
+async function handleLoadAdminBookings() {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAdminBookingsError("Please sign in again.");
+    return;
+  }
+
+  setShowAdminBookings(true);
+  setAdminBookingsLoading(true);
+  setAdminBookingsError("");
+  setAdminBookingsMessage("");
+
+  try {
+    const bookings = await getAdminBookings(token);
+    setAdminBookings(bookings);
+  } catch (err) {
+    setAdminBookingsError(
+      err instanceof Error
+        ? err.message
+        : "Failed to load reservations.",
+    );
+  } finally {
+    setAdminBookingsLoading(false);
+  }
+}
+
+async function handleAdminBookingStatus(
+  bookingId: string,
+  status: "CONFIRMED" | "CANCELLED",
+) {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAdminBookingsError("Please sign in again.");
+    return;
+  }
+
+  const action = status === "CONFIRMED" ? "confirm" : "cancel";
+
+  if (!window.confirm(`Are you sure you want to ${action} this reservation?`)) {
+    return;
+  }
+
+  setAdminActionBookingId(bookingId);
+  setAdminBookingsError("");
+  setAdminBookingsMessage("");
+
+  try {
+    await updateAdminBookingStatus(bookingId, status, token);
+
+    const bookings = await getAdminBookings(token);
+    setAdminBookings(bookings);
+    setAdminBookingsMessage(
+      status === "CONFIRMED"
+        ? "Reservation confirmed successfully."
+        : "Reservation cancelled successfully.",
+    );
+  } catch (err) {
+    setAdminBookingsError(
+      err instanceof Error
+        ? err.message
+        : "Failed to update reservation.",
+    );
+  } finally {
+    setAdminActionBookingId(null);
+  }
+}
+
+async function handleModifyAdminBooking(booking: AdminBooking) {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAdminBookingsError("Please sign in again.");
+    return;
+  }
+
+  const checkIn = window.prompt(
+    "Check-in date (YYYY-MM-DD):",
+    booking.checkIn.slice(0, 10),
+  );
+  if (checkIn === null) return;
+
+  const checkOut = window.prompt(
+    "Check-out date (YYYY-MM-DD):",
+    booking.checkOut.slice(0, 10),
+  );
+  if (checkOut === null) return;
+
+  const adultsText = window.prompt("Number of adults:", String(booking.adults));
+  if (adultsText === null) return;
+
+  const childrenText = window.prompt(
+    "Number of children:",
+    String(booking.children),
+  );
+  if (childrenText === null) return;
+
+  const quantityText = window.prompt(
+    "Number of rooms:",
+    String(booking.roomQuantity),
+  );
+  if (quantityText === null) return;
+
+  const adults = Number(adultsText);
+  const children = Number(childrenText);
+  const roomQuantity = Number(quantityText);
+
+  if (
+    !Number.isInteger(adults) ||
+    adults < 1 ||
+    !Number.isInteger(children) ||
+    children < 0 ||
+    !Number.isInteger(roomQuantity) ||
+    roomQuantity < 1
+  ) {
+    setAdminBookingsError(
+      "Enter valid whole numbers for guests and room quantity.",
+    );
+    return;
+  }
+
+  setAdminActionBookingId(booking.id);
+  setAdminBookingsError("");
+  setAdminBookingsMessage("");
+
+  try {
+    await modifyAdminBooking(
+      booking.id,
+      { checkIn, checkOut, adults, children, roomQuantity },
+      token,
+    );
+
+    const bookings = await getAdminBookings(token);
+    setAdminBookings(bookings);
+    setAdminBookingsMessage("Reservation updated successfully.");
+  } catch (err) {
+    setAdminBookingsError(
+      err instanceof Error
+        ? err.message
+        : "Failed to modify reservation.",
+    );
+  } finally {
+    setAdminActionBookingId(null);
+  }
+}
 
 async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
@@ -101,10 +268,11 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   return;
 }
       const result = await registerUser(
-        authTitle,
+      
         authName.trim(),
         authEmail.trim(),
         authPassword,
+          authTitle,
       );
 
       setAuthMessage(result.message);
@@ -360,51 +528,72 @@ setBookingConfirmation(result.data);
 
 
 <div className="header-actions">
- {authUser ? (
+ 
+{authUser ? (
+  <>
+    <span className="login-link">
+      Welcome, {authUser.name || authUser.email}
+    </span>
 
-<>
-  <span className="login-link">
-    Welcome, {authUser.name || authUser.email}
-  </span>
+    <button
+      type="button"
+      className="login-link sign-out-button"
+      onClick={async () => {
+        await handleLoadMyBookings();
 
-  <button
-    type="button"
-    className="login-link sign-out-button"
-
-onClick={async () => {
-  await handleLoadMyBookings();
-
-  document.getElementById("my-bookings")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}}
-    disabled={myBookingsLoading}
-  >
-    {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
-  </button>
-
-  <button
-    type="button"
-    className="login-link sign-out-button"
-    onClick={handleSignOut}
-  >
-    Sign out
-  </button>
-</>
-
-) : (
-    <a
-      className="login-link"
-      href="#auth"
-      onClick={(event) => {
-        event.preventDefault();
-        setAuthMode("login");
+        document.getElementById("my-bookings")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       }}
+      disabled={myBookingsLoading}
     >
-      Sign in
-    </a>
-  )}
+      {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
+    </button>
+
+    {/* ADD THE ADMIN BUTTON HERE */}
+    {authUser.role === "ADMIN" && (
+      <button
+        type="button"
+        className="login-link sign-out-button"
+        onClick={async () => {
+          if (showAdminBookings) {
+            setShowAdminBookings(false);
+          } else {
+            await handleLoadAdminBookings();
+          }
+        }}
+        disabled={adminBookingsLoading}
+      >
+        {adminBookingsLoading
+          ? "Loading reservations..."
+          : showAdminBookings
+            ? "Hide Admin Reservations"
+            : "Admin Reservations"}
+      </button>
+    )}
+
+    <button
+      type="button"
+      className="login-link sign-out-button"
+      onClick={handleSignOut}
+    >
+      Sign out
+    </button>
+  </>
+) : (
+  <a
+    className="login-link"
+    href="#auth"
+    onClick={(event) => {
+      event.preventDefault();
+      setAuthMode("login");
+    }}
+  >
+    Sign in
+  </a>
+)}
+
   <a className="header-cta" href="#rooms">
     Explore Stays <span>↗</span>
   </a>
@@ -1050,6 +1239,163 @@ onClick={async () => {
     </button>
   )}
 
+        </article>
+      ))}
+  </section>
+)}
+
+{authUser?.role === "ADMIN" && showAdminBookings && (
+  <section id="admin-bookings" className="my-bookings-section">
+    <h2>Admin Reservations</h2>
+    <p>View and manage guest reservations at The Grand Aurelia.</p>
+
+    {adminBookingsLoading && <p>Loading reservations...</p>}
+
+    {adminBookingsError && (
+      <p role="alert">{adminBookingsError}</p>
+    )}
+
+    {adminBookingsMessage && (
+      <p role="status">{adminBookingsMessage}</p>
+    )}
+
+    {!adminBookingsLoading &&
+      !adminBookingsError &&
+      adminBookings.length === 0 && (
+        <p>No reservations found.</p>
+      )}
+
+    {!adminBookingsLoading &&
+      adminBookings.map((booking) => (
+        <article key={booking.id} className="my-booking-card">
+          <h3>{booking.roomType.branch.hotel.name}</h3>
+
+          <p>
+            <strong>Booking reference:</strong> {booking.id}
+          </p>
+
+          <p>
+            <strong>Guest:</strong>{" "}
+            {booking.user.name || "Guest"}
+          </p>
+
+          <p>
+            <strong>Email:</strong> {booking.user.email}
+          </p>
+
+          <p>
+            <strong>Room:</strong> {booking.roomType.name}
+          </p>
+
+          <p>
+            <strong>Branch:</strong> {booking.roomType.branch.name}
+          </p>
+
+          <p>
+            <strong>Address:</strong>{" "}
+            {booking.roomType.branch.address},{" "}
+            {booking.roomType.branch.city}
+          </p>
+
+          <p>
+            <strong>Check-in:</strong>{" "}
+            {new Date(booking.checkIn).toLocaleDateString("en-ZA")}
+          </p>
+
+          <p>
+            <strong>Check-out:</strong>{" "}
+            {new Date(booking.checkOut).toLocaleDateString("en-ZA")}
+          </p>
+
+          <p>
+            <strong>Adults:</strong> {booking.adults}
+          </p>
+
+          <p>
+            <strong>Children:</strong> {booking.children}
+          </p>
+
+          <p>
+            <strong>Rooms:</strong> {booking.roomQuantity}
+          </p>
+
+          <p>
+            <strong>Total:</strong>{" "}
+            {Number(booking.totalPrice).toLocaleString("en-ZA", {
+              style: "currency",
+              currency: "ZAR",
+            })}
+          </p>
+
+          <p
+            className={`booking-status booking-status-${booking.status.toLowerCase()}`}
+          >
+            Status:{" "}
+            {booking.status === "PENDING"
+              ? "Pending confirmation"
+              : booking.status === "CONFIRMED"
+                ? "Confirmed"
+                : booking.status === "CANCELLED"
+                  ? "Cancelled"
+                  : booking.status === "COMPLETED"
+                    ? "Completed"
+                    : booking.status}
+          </p>
+
+          <h4>Payments</h4>
+
+          {booking.payments.length === 0 ? (
+            <p>No payment records.</p>
+          ) : (
+            booking.payments.map((payment) => (
+              <p key={payment.id}>
+                {payment.provider}:{" "}
+                {Number(payment.amount).toLocaleString("en-ZA", {
+                  style: "currency",
+                  currency: payment.currency,
+                })}{" "}
+                — {payment.status}
+              </p>
+            ))
+          )}
+
+          {booking.status === "PENDING" && (
+            <button
+              type="button"
+              className="login-link sign-out-button"
+              disabled={adminActionBookingId === booking.id}
+              onClick={() =>
+                handleAdminBookingStatus(booking.id, "CONFIRMED")
+              }
+            >
+              Confirm Reservation
+            </button>
+          )}
+
+          {(booking.status === "PENDING" ||
+            booking.status === "CONFIRMED") && (
+            <>
+              <button
+                type="button"
+                className="login-link sign-out-button"
+                disabled={adminActionBookingId === booking.id}
+                onClick={() => handleModifyAdminBooking(booking)}
+              >
+                Modify Reservation
+              </button>
+
+              <button
+                type="button"
+                className="login-link sign-out-button"
+                disabled={adminActionBookingId === booking.id}
+                onClick={() =>
+                  handleAdminBookingStatus(booking.id, "CANCELLED")
+                }
+              >
+                Cancel Reservation
+              </button>
+            </>
+          )}
         </article>
       ))}
   </section>
