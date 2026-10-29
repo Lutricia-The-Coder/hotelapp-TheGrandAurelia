@@ -1,22 +1,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  API_BASE_URL,
-  createBooking,
-  getUserBookings,
-  cancelBooking,
-  loginUser,
-  registerUser,
-  getAdminBookings,
-  updateAdminBookingStatus,
-  modifyAdminBooking,
-  getFavoriteHotels,
-  addFavoriteHotel,
-  removeFavoriteHotel,
-  type UserBooking,
-  type AdminBooking,
-  type FavoriteHotel,
-} from "./api";
+  API_BASE_URL,createBooking,getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
+  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,type UserBooking,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
 import "./index.css";
 
 type Branch = {
@@ -115,7 +101,16 @@ const [favoritesError, setFavoritesError] = useState("");
 const [favoritesMessage, setFavoritesMessage] = useState("");
 const [favoriteActionHotelId, setFavoriteActionHotelId] = useState<string | null>(null);
 const [showFavorites, setShowFavorites] = useState(false);
-
+const [hotelReviews, setHotelReviews] = useState<
+  Record<string, HotelReviewsResponse>
+>({});
+const [reviewsOpen, setReviewsOpen] = useState<Record<string, boolean>>({});
+const [reviewsLoadingHotelId, setReviewsLoadingHotelId] = useState<string | null>(null);
+const [reviewErrors, setReviewErrors] = useState<Record<string, string>>({});
+const [reviewMessages, setReviewMessages] = useState<Record<string, string>>({});
+const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
+const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
+const [reviewSubmittingHotelId, setReviewSubmittingHotelId] = useState<string | null>(null);
 
 async function handleLoadAdminBookings() {
   const token = sessionStorage.getItem("hotelAuthToken");
@@ -337,6 +332,78 @@ async function handleToggleFavorite(hotel: Hotel) {
     );
   } finally {
     setFavoriteActionHotelId(null);
+  }
+}
+
+async function handleLoadHotelReviews(hotelId: string) {
+  setReviewsOpen((previous) => ({ ...previous, [hotelId]: true }));
+  setReviewsLoadingHotelId(hotelId);
+  setReviewErrors((previous) => ({ ...previous, [hotelId]: "" }));
+
+  try {
+    const result = await getHotelReviews(hotelId);
+
+    setHotelReviews((previous) => ({
+      ...previous,
+      [hotelId]: result,
+    }));
+  } catch (err) {
+    setReviewErrors((previous) => ({
+      ...previous,
+      [hotelId]: err instanceof Error
+        ? err.message
+        : "Failed to load reviews.",
+    }));
+  } finally {
+    setReviewsLoadingHotelId(null);
+  }
+}
+
+async function handleSubmitHotelReview(hotelId: string) {
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setAuthMode("login");
+    setAuthError("Please sign in to submit a review.");
+    document.getElementById("auth")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    return;
+  }
+
+  setReviewSubmittingHotelId(hotelId);
+  setReviewErrors((previous) => ({ ...previous, [hotelId]: "" }));
+  setReviewMessages((previous) => ({ ...previous, [hotelId]: "" }));
+
+  try {
+    await submitHotelReview(
+      hotelId,
+      reviewRatings[hotelId] ?? 5,
+      reviewComments[hotelId] ?? "",
+      token,
+    );
+
+    const result = await getHotelReviews(hotelId);
+
+    setHotelReviews((previous) => ({
+      ...previous,
+      [hotelId]: result,
+    }));
+
+    setReviewMessages((previous) => ({
+      ...previous,
+      [hotelId]: "Your review has been saved.",
+    }));
+  } catch (err) {
+    setReviewErrors((previous) => ({
+      ...previous,
+      [hotelId]: err instanceof Error
+        ? err.message
+        : "Failed to save your review.",
+    }));
+  } finally {
+    setReviewSubmittingHotelId(null);
   }
 }
 
@@ -997,6 +1064,126 @@ setBookingConfirmation(result.data);
                   <p className="destination-description">
                     {hotel.description || "A thoughtful stay, designed around you."}
                   </p>
+
+<div className="hotel-reviews">
+  <button
+    type="button"
+    className="login-link sign-out-button"
+    onClick={() => {
+      if (reviewsOpen[hotel.id]) {
+        setReviewsOpen((previous) => ({
+          ...previous,
+          [hotel.id]: false,
+        }));
+      } else {
+        void handleLoadHotelReviews(hotel.id);
+      }
+    }}
+    disabled={reviewsLoadingHotelId === hotel.id}
+  >
+    {reviewsLoadingHotelId === hotel.id
+      ? "Loading reviews..."
+      : reviewsOpen[hotel.id]
+        ? "Hide Reviews"
+        : "Reviews & Ratings"}
+  </button>
+
+  {hotelReviews[hotel.id] && (
+    <p>
+      <strong>
+        {hotelReviews[hotel.id].averageRating === null
+          ? "Not rated yet"
+          : `${hotelReviews[hotel.id].averageRating!.toFixed(1)} / 5 ★`}
+      </strong>
+      {" "}({hotelReviews[hotel.id].count} reviews)
+    </p>
+  )}
+
+  {reviewsOpen[hotel.id] && (
+    <div className="hotel-reviews-panel">
+      {reviewErrors[hotel.id] && (
+        <p role="alert">{reviewErrors[hotel.id]}</p>
+      )}
+
+      {reviewMessages[hotel.id] && (
+        <p role="status">{reviewMessages[hotel.id]}</p>
+      )}
+
+      {hotelReviews[hotel.id]?.data.map((review) => (
+        <article key={review.id} className="hotel-review-card">
+          <p>
+            <strong>{review.user.name || "Guest"}</strong>
+            {" · "}
+            {"★".repeat(review.rating)}
+            {"☆".repeat(5 - review.rating)}
+          </p>
+
+          {review.comment && <p>{review.comment}</p>}
+
+          <small>
+            {new Date(review.createdAt).toLocaleDateString("en-ZA")}
+          </small>
+        </article>
+      ))}
+
+      {hotelReviews[hotel.id]?.count === 0 && (
+        <p>No reviews yet. Be the first to share your experience.</p>
+      )}
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSubmitHotelReview(hotel.id);
+        }}
+      >
+        <label>
+          Your rating
+          <select
+            value={reviewRatings[hotel.id] ?? 5}
+            onChange={(event) =>
+              setReviewRatings((previous) => ({
+                ...previous,
+                [hotel.id]: Number(event.target.value),
+              }))
+            }
+          >
+            <option value={5}>5 - Excellent</option>
+            <option value={4}>4 - Very good</option>
+            <option value={3}>3 - Good</option>
+            <option value={2}>2 - Fair</option>
+            <option value={1}>1 - Poor</option>
+          </select>
+        </label>
+
+        <label>
+          Your review
+          <textarea
+            rows={3}
+            maxLength={2000}
+            value={reviewComments[hotel.id] ?? ""}
+            onChange={(event) =>
+              setReviewComments((previous) => ({
+                ...previous,
+                [hotel.id]: event.target.value,
+              }))
+            }
+            placeholder="Share your experience..."
+          />
+        </label>
+
+        <button
+          type="submit"
+          className="room-book-button"
+          disabled={reviewSubmittingHotelId === hotel.id}
+        >
+          {reviewSubmittingHotelId === hotel.id
+            ? "Submitting..."
+            : "Submit Review"}
+        </button>
+      </form>
+    </div>
+  )}
+</div>
 
                   {(branches[hotel.id] ?? []).map((branch) => (
                     <div className="branch-details" key={branch.id}>
