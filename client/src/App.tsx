@@ -2,11 +2,13 @@
 import { useEffect, useState } from "react";
 import {
   API_BASE_URL,createBooking,getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
-  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,type UserBooking,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
+  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
 import "./index.css";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store/store";
 import { setUser, clearUser } from "./store/authSlice";
+
+import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
 
 type Branch = {
   id: string;
@@ -62,18 +64,23 @@ const [bookingMessage, setBookingMessage] = useState("");
 const [bookingError, setBookingError] = useState("");
 const [bookingLoading, setBookingLoading] = useState(false);
 
-const [myBookings, setMyBookings] = useState<UserBooking[]>([]);
-const [myBookingsLoading, setMyBookingsLoading] = useState(false);
-const [myBookingsError, setMyBookingsError] = useState("");
 
-const [bookingConfirmation, setBookingConfirmation] = useState<{
-  id: string;
-  checkIn: string;
-  checkOut: string;
-  totalPrice: number | string;
-  roomTypeId: string;
-  userId: string;
-} | null>(null);
+const myBookings = useSelector(
+  (state: RootState) => state.bookings.bookings,
+);
+
+const myBookingsLoading = useSelector(
+  (state: RootState) => state.bookings.loading,
+);
+
+const myBookingsError = useSelector(
+  (state: RootState) => state.bookings.error,
+);
+
+const bookingConfirmation = useSelector(
+  (state: RootState) => state.bookings.confirmation,
+);
+
 
 const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 const [showMyBookings, setShowMyBookings] = useState(false);
@@ -447,36 +454,43 @@ dispatch(setUser(result.user));
   }
 }
 
+
 async function handleLoadMyBookings() {
   setShowMyBookings(true);
+
   if (!authUser) {
-    setMyBookingsError("Please sign in to view your bookings.");
+    dispatch(setBookingsError("Please sign in to view your bookings."));
     return;
   }
 
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
-    setMyBookingsError("Your session has expired. Please sign in again.");
+    dispatch(
+      setBookingsError("Your session has expired. Please sign in again."),
+    );
     return;
   }
 
-  setMyBookingsLoading(true);
-  setMyBookingsError("");
+  dispatch(setBookingsLoading(true));
+  dispatch(setBookingsError(""));
 
   try {
     const bookings = await getUserBookings(authUser.id, token);
-    setMyBookings(bookings);
+    dispatch(setBookings(bookings));
   } catch (error) {
-    setMyBookingsError(
-      error instanceof Error
-        ? error.message
-        : "Failed to load your bookings.",
+    dispatch(
+      setBookingsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load your bookings.",
+      ),
     );
   } finally {
-    setMyBookingsLoading(false);
+    dispatch(setBookingsLoading(false));
   }
 }
+
 
 async function handleCancelBooking(bookingId: string) {
   const confirmed = window.confirm(
@@ -488,33 +502,37 @@ async function handleCancelBooking(bookingId: string) {
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
-    setMyBookingsError("Your session has expired. Please sign in again.");
+    dispatch(
+      setBookingsError("Your session has expired. Please sign in again."),
+    );
     return;
   }
 
   setCancellingBookingId(bookingId);
-  setMyBookingsError("");
+  dispatch(setBookingsError(""));
 
   try {
     await cancelBooking(bookingId, token);
 
-    setMyBookings((currentBookings) =>
-      currentBookings.map((booking) =>
-        booking.id === bookingId
-          ? { ...booking, status: "CANCELLED" }
-          : booking,
-      ),
+    dispatch(
+      updateBookingStatus({
+        bookingId,
+        status: "CANCELLED",
+      }),
     );
   } catch (error) {
-    setMyBookingsError(
-      error instanceof Error
-        ? error.message
-        : "Failed to cancel booking.",
+    dispatch(
+      setBookingsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to cancel booking.",
+      ),
     );
   } finally {
     setCancellingBookingId(null);
   }
 }
+
 
 function handleSignOut() {
   sessionStorage.removeItem("hotelAuthToken");
@@ -526,6 +544,7 @@ dispatch(clearUser());
   setAuthError("");
   setAuthPassword("");
   setAuthConfirmPassword("");
+  dispatch(clearBookings());
 }
 
 async function handleBookingSubmit(
@@ -578,7 +597,7 @@ dispatch(clearUser());
     if (!result.success || !result.data) {
       throw new Error(result.message || "Booking could not be completed.");
     }
-setBookingConfirmation(result.data);
+dispatch(setBookingConfirmation(result.data));
     setBookingMessage(
       `Booking created successfully! Total: R${Number(result.data.totalPrice).toFixed(2)}`,
     );
