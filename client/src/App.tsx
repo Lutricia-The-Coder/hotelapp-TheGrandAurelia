@@ -31,12 +31,21 @@ type Hotel = {
   id: string;
   name: string;
   description?: string | null;
+  images?: {
+    id: string;
+    url: string;
+    altText?: string | null;
+    sortOrder: number;
+  }[];
 };
 
 function App() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [branches, setBranches] = useState<Record<string, Branch[]>>({});
   const [rooms, setRooms] = useState<Record<string, RoomType[]>>({});
+  const [galleryIndexes, setGalleryIndexes] = useState<
+  Record<string, number>
+>({});
   
 const [hotelSearch, setHotelSearch] = useState("");
 const [locationSearch, setLocationSearch] = useState("");
@@ -714,7 +723,7 @@ const prices = hotelBranches
   .flatMap((branch) => rooms[branch.id] ?? [])
   .map((room) => Number(room.pricePerNight))
   .filter((price) => Number.isFinite(price));
-  
+
   const minPrice =
     minNightlyPrice === "" ? null : Number(minNightlyPrice);
 
@@ -1175,9 +1184,72 @@ const prices = hotelBranches
           <div className="destination-grid">
             {filteredHotels.map((hotel) => (
               <article className="destination-card" key={hotel.id}>
-                <div className="destination-photo">
-                  <div className="photo-overlay" />
-                  <span className="photo-tag">OUR SIGNATURE STAY</span>
+              
+<div className="destination-photo">
+  {hotel.images && hotel.images.length > 0 && (
+    <img
+      className="destination-photo-image"
+      src={
+        hotel.images[
+          galleryIndexes[hotel.id] ?? 0
+        ].url
+      }
+      alt={
+        hotel.images[
+          galleryIndexes[hotel.id] ?? 0
+        ].altText || `${hotel.name} accommodation`
+      }
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+      }}
+    />
+  )}
+
+  <div className="photo-overlay" />
+
+  {hotel.images && hotel.images.length > 1 && (
+    <div className="gallery-controls">
+      <button
+        type="button"
+        aria-label={`Previous photo of ${hotel.name}`}
+        onClick={() =>
+          setGalleryIndexes((previous) => ({
+            ...previous,
+            [hotel.id]:
+              ((previous[hotel.id] ?? 0) -
+                1 +
+                hotel.images!.length) %
+              hotel.images!.length,
+          }))
+        }
+      >
+        ‹
+      </button>
+
+      <span>
+        {(galleryIndexes[hotel.id] ?? 0) + 1} / {hotel.images.length}
+      </span>
+
+      <button
+        type="button"
+        aria-label={`Next photo of ${hotel.name}`}
+        onClick={() =>
+          setGalleryIndexes((previous) => ({
+            ...previous,
+            [hotel.id]:
+              ((previous[hotel.id] ?? 0) + 1) %
+              hotel.images!.length,
+          }))
+        }
+      >
+        ›
+      </button>
+    </div>
+  )}
+
+  <span className="photo-tag">OUR SIGNATURE STAY</span>
+
+          
                   <span className="photo-count">
                     {(branches[hotel.id] ?? []).length} {(branches[hotel.id] ?? []).length === 1 ? "location" : "locations"}
                   </span>

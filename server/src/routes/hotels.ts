@@ -220,10 +220,14 @@ router.get("/:id", async (req, res) => {
 router.get("/", async (_req, res) => {
   try {
     const hotels = await prisma.hotel.findMany({
-      include: {
-        branches: true,
-        images: true,
-      },
+     include: {
+  branches: true,
+  images: {
+    orderBy: {
+      sortOrder: "asc",
+    },
+  },
+},
       orderBy: {
         createdAt: "desc",
       },
