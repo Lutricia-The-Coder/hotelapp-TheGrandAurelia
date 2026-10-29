@@ -10,13 +10,25 @@ import { setUser, clearUser } from "./store/authSlice";
 
 import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
 
+
 type Branch = {
   id: string;
   name: string;
   address: string;
   city: string;
   country: string;
+  phone?: string | null;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  cancellationPolicy?: string | null;
+  amenities?: {
+    amenity: {
+      id: string;
+      name: string;
+    };
+  }[];
 };
+
 
 type RoomType = {
   id: string;
@@ -369,6 +381,41 @@ async function handleLoadHotelReviews(hotelId: string) {
     }));
   } finally {
     setReviewsLoadingHotelId(null);
+  }
+}
+
+async function handleShareHotel(hotel: Hotel) {
+  const url = `${window.location.origin}${window.location.pathname}#hotel-${hotel.id}`;
+
+  const shareData = {
+    title: hotel.name,
+    text: `Take a look at ${hotel.name} at The Grand Aurelia.`,
+    url,
+  };
+
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share(shareData);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      window.prompt("Copy this hotel link to share:", url);
+    }
+
+    return;
+  }
+
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("Clipboard unavailable");
+    }
+
+    await navigator.clipboard.writeText(url);
+    window.alert("Hotel link copied to clipboard.");
+  } catch {
+    window.prompt("Copy this hotel link to share:", url);
   }
 }
 
@@ -1183,7 +1230,7 @@ const prices = hotelBranches
 
           <div className="destination-grid">
             {filteredHotels.map((hotel) => (
-              <article className="destination-card" key={hotel.id}>
+              <article className="destination-card" key={hotel.id} id={`hotel-${hotel.id}`}>
               
 <div className="destination-photo">
   {hotel.images && hotel.images.length > 0 && (
@@ -1257,7 +1304,16 @@ const prices = hotelBranches
                 <div className="destination-content">
                   <p className="eyebrow destination-eyebrow">SOUTH AFRICA · MPUMALANGA</p>
                   <h3>{hotel.name}</h3>
-                  
+
+<button
+  type="button"
+  className="login-link sign-out-button"
+  onClick={() => void handleShareHotel(hotel)}
+  aria-label={`Share ${hotel.name}`}
+>
+  Share Hotel ↗
+</button>
+
 <button
   type="button"
   className="login-link sign-out-button"
@@ -1402,7 +1458,63 @@ const prices = hotelBranches
                         <span className="location-dot" />
                         <strong>{branch.name}</strong>
                       </div>
-                      <p>{branch.address}, {branch.city}, {branch.country}</p>
+                     
+<p>
+  {branch.address}, {branch.city}, {branch.country}
+</p>
+
+<a
+  className="text-link"
+  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${branch.address}, ${branch.city}, ${branch.country}`,
+  )}`}
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  View on Map ↗
+</a>
+
+
+                      
+{(branch.checkInTime ||
+  branch.checkOutTime ||
+  branch.cancellationPolicy) && (
+  <div className="branch-policies">
+    {branch.checkInTime && (
+      <p>
+        <strong>Check-in:</strong> {branch.checkInTime}
+      </p>
+    )}
+
+    {branch.checkOutTime && (
+      <p>
+        <strong>Check-out:</strong> {branch.checkOutTime}
+      </p>
+    )}
+
+    {branch.cancellationPolicy && (
+      <p>
+        <strong>Cancellation policy:</strong>{" "}
+        {branch.cancellationPolicy}
+      </p>
+    )}
+  </div>
+)}
+
+                      
+{branch.amenities && branch.amenities.length > 0 && (
+  <div className="branch-amenities">
+    <strong>Facilities & Amenities</strong>
+    <div className="amenity-list">
+      {branch.amenities.map(({ amenity }) => (
+        <span key={amenity.id} className="amenity-tag">
+          {amenity.name}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+
                       <a className="text-link" href="#rooms">
                         Explore this location <span>→</span>
                       </a>
