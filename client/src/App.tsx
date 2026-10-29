@@ -4,6 +4,9 @@ import {
   API_BASE_URL,createBooking,getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
   updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,type UserBooking,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
 import "./index.css";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "./store/store";
+import { setUser, clearUser } from "./store/authSlice";
 
 type Branch = {
   id: string;
@@ -35,24 +38,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
-  const [authUser, setAuthUser] = useState<{
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-} | null>(() => {
-  const savedUser = sessionStorage.getItem("hotelAuthUser");
+  const dispatch = useDispatch<AppDispatch>();
 
-  if (!savedUser) return null;
+const authUser = useSelector(
+  (state: RootState) => state.auth.user,
+);
 
-  try {
-    return JSON.parse(savedUser);
-  } catch {
-    sessionStorage.removeItem("hotelAuthUser");
-    sessionStorage.removeItem("hotelAuthToken");
-    return null;
-  }
-});
   const [authName, setAuthName] = useState("");
 const [authEmail, setAuthEmail] = useState("");
 const [authTitle, setAuthTitle] = useState("");
@@ -438,10 +429,9 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
       if (!result.token || !result.user) {
         throw new Error("Login response was incomplete. Please try again.");
       }
-
-      sessionStorage.setItem("hotelAuthToken", result.token);
-      sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
-      setAuthUser(result.user);
+sessionStorage.setItem("hotelAuthToken", result.token);
+sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
+dispatch(setUser(result.user));
 
       setAuthMessage(`Welcome${result.user.name ? `, ${result.user.name}` : ""}! You are signed in.`);
       setAuthPassword("");
@@ -530,7 +520,7 @@ function handleSignOut() {
   sessionStorage.removeItem("hotelAuthToken");
   sessionStorage.removeItem("hotelAuthUser");
 
-  setAuthUser(null);
+dispatch(clearUser());
   setAuthMode(null);
   setAuthMessage("");
   setAuthError("");
@@ -554,7 +544,7 @@ async function handleBookingSubmit(
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
-    setAuthUser(null);
+dispatch(clearUser());
     setBookingError("Your session has expired. Please sign in again.");
     setAuthMode("login");
     return;
