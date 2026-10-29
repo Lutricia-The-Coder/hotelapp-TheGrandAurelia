@@ -37,6 +37,12 @@ function App() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [branches, setBranches] = useState<Record<string, Branch[]>>({});
   const [rooms, setRooms] = useState<Record<string, RoomType[]>>({});
+  
+const [hotelSearch, setHotelSearch] = useState("");
+const [locationSearch, setLocationSearch] = useState("");
+const [minNightlyPrice, setMinNightlyPrice] = useState("");
+const [maxNightlyPrice, setMaxNightlyPrice] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
@@ -671,6 +677,62 @@ dispatch(setBookingConfirmation(result.data));
     ? Math.min(...allRooms.map((room) => room.pricePerNight))
     : null;
 
+const filteredHotels = hotels.filter((hotel) => {
+  const hotelBranches = branches[hotel.id] ?? [];
+  const search = hotelSearch.trim().toLowerCase();
+  const location = locationSearch.trim().toLowerCase();
+
+  const matchesSearch =
+    !search ||
+    [
+      hotel.name,
+      hotel.description ?? "",
+      ...hotelBranches.flatMap((branch) => [
+        branch.name,
+        branch.address,
+        branch.city,
+        branch.country,
+        ...(rooms[branch.id] ?? []).flatMap((room) => [
+          room.name,
+          room.description ?? "",
+        ]),
+      ]),
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search);
+
+  const matchesLocation =
+    !location ||
+    hotelBranches.some((branch) =>
+      [branch.name, branch.address, branch.city, branch.country].some(
+        (value) => value.toLowerCase().includes(location),
+      ),
+    );
+
+const prices = hotelBranches
+  .flatMap((branch) => rooms[branch.id] ?? [])
+  .map((room) => Number(room.pricePerNight))
+  .filter((price) => Number.isFinite(price));
+  
+  const minPrice =
+    minNightlyPrice === "" ? null : Number(minNightlyPrice);
+
+  const maxPrice =
+    maxNightlyPrice === "" ? null : Number(maxNightlyPrice);
+
+  const matchesPrice =
+    minPrice === null && maxPrice === null
+      ? true
+      : prices.some(
+          (price) =>
+            (minPrice === null || price >= minPrice) &&
+            (maxPrice === null || price <= maxPrice),
+        );
+
+  return matchesSearch && matchesLocation && matchesPrice;
+});
+
   return (
     <div className="site-shell">
       <header className="site-header">
@@ -1042,8 +1104,76 @@ dispatch(setBookingConfirmation(result.data));
     {favoritesMessage}
   </p>
 )}
+
+<div className="hotel-search-filters">
+  <label>
+    Search accommodations
+    <input
+      type="search"
+      value={hotelSearch}
+      onChange={(event) => setHotelSearch(event.target.value)}
+      placeholder="Hotel name, room type, or description"
+    />
+  </label>
+
+  <label>
+    Location
+    <input
+      type="search"
+      value={locationSearch}
+      onChange={(event) => setLocationSearch(event.target.value)}
+      placeholder="City, address, or branch"
+    />
+  </label>
+
+  <label>
+    Minimum price per night (R)
+    <input
+      type="number"
+      min="0"
+      value={minNightlyPrice}
+      onChange={(event) => setMinNightlyPrice(event.target.value)}
+      placeholder="No minimum"
+    />
+  </label>
+
+  <label>
+    Maximum price per night (R)
+    <input
+      type="number"
+      min="0"
+      value={maxNightlyPrice}
+      onChange={(event) => setMaxNightlyPrice(event.target.value)}
+      placeholder="No maximum"
+    />
+  </label>
+
+  <button
+    type="button"
+    className="login-link sign-out-button"
+    onClick={() => {
+      setHotelSearch("");
+      setLocationSearch("");
+      setMinNightlyPrice("");
+      setMaxNightlyPrice("");
+    }}
+  >
+    Clear filters
+  </button>
+</div>
+
+<p className="status-message" role="status">
+  Showing {filteredHotels.length} of {hotels.length} accommodations
+</p>
+
+{hotels.length > 0 && filteredHotels.length === 0 && (
+  <p className="status-message">
+    No accommodations match your search. Try changing your filters.
+  </p>
+)}
+
           <div className="destination-grid">
-            {hotels.map((hotel) => (
+            {filteredHotels.map((hotel) => (
               <article className="destination-card" key={hotel.id}>
                 <div className="destination-photo">
                   <div className="photo-overlay" />
