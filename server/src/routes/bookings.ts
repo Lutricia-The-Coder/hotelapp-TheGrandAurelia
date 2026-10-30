@@ -6,7 +6,10 @@ import {
   requireAdmin,
   type AuthenticatedRequest,
 } from "../middleware/auth.js";import { sendEmail } from "../lib/mailer.js";  
-
+import {
+  getStripeClient,
+  getFrontendUrl,
+} from "../lib/stripe.js";
 const router = Router();
 
 // GET /api/v1/bookings/user/:userId
@@ -673,52 +676,125 @@ const {
 
     const totalPrice = Number(room.pricePerNight) * nights * quantity;
 
-    const booking = await prisma.booking.create({
-      data: {
-        checkIn: parsedCheckIn,
-        checkOut: parsedCheckOut,
-        adults: guestAdults,
-        children: guestChildren,
-        roomQuantity: quantity,
-        totalPrice,
-        roomTypeId: room.id,
+   
+const amountInCents = Math.round(totalPrice * 100);
+
+if (!Number.isSafeInteger(amountInCents) || amountInCents < 50) {
+  res.status(400).json({
+    success: false,
+    message: "Booking amount must be at least R0.50.",
+  });
+  return;
+}
+
+// Create the pending booking and payment together.
+const { booking, payment } = await prisma.$transaction(async (tx) => {
+  const booking = await tx.booking.create({
+    data: {
+      checkIn: parsedCheckIn,
+      checkOut: parsedCheckOut,
+      adults: guestAdults,
+      children: guestChildren,
+      roomQuantity: quantity,
+      totalPrice,
+      roomTypeId: room.id,
+      userId: user.id,
+    },
+  });
+
+  const payment = await tx.payment.create({
+    data: {
+      amount: totalPrice,
+      currency: "ZAR",
+      provider: "stripe",
+      bookingId: booking.id,
+    },
+  });
+
+  return { booking, payment };
+});
+
+try {
+  const stripe = getStripeClient();
+  const frontendUrl = getFrontendUrl();
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+allowed_payment_method_types: ["card"],
+    customer_email: user.email,
+    client_reference_id: booking.id,
+
+    line_items: [
+      {
+        price_data: {
+          currency: "zar",
+          unit_amount: amountInCents,
+          product_data: {
+            name: `The Grand Aurelia - ${room.name}`,
+            description: `${nights} night(s), ${quantity} room(s)`,
+          },
+        },
+        quantity: 1,
+      },
+    ],
+
+    metadata: {
+      bookingId: booking.id,
+      paymentId: payment.id,
+      userId: user.id,
+    },
+
+    payment_intent_data: {
+      metadata: {
+        bookingId: booking.id,
+        paymentId: payment.id,
         userId: user.id,
       },
+    },
+
+    success_url:
+      `${frontendUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+
+    cancel_url:
+      `${frontendUrl}/?payment=cancelled&booking_id=${booking.id}`,
+  });
+
+  if (!session.url) {
+    throw new Error("Stripe did not return a checkout URL.");
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      providerPaymentId: session.id,
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "Booking created. Continue to secure payment.",
+    data: booking,
+    checkoutUrl: session.url,
+    paymentId: payment.id,
+  });
+} catch (stripeError) {
+  // Do not leave an unpaid booking occupying room inventory
+  // when Checkout Session creation fails.
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "FAILED" },
     });
 
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Booking confirmation — The Grand Aurelia",
-        text: [
-          "Thank you for booking with The Grand Aurelia!",
-          "",
-          `Booking reference: ${booking.id}`,
-          `Room: ${room.name}`,
-          `Check-in: ${checkIn}`,
-          `Check-out: ${checkOut}`,
-          `Rooms booked: ${quantity}`,
-          `Adults: ${guestAdults}`,
-          `Children: ${guestChildren}`,
-          `Total price: ${Number(totalPrice).toLocaleString("en-ZA", {
-            style: "currency",
-            currency: "ZAR",
-          })}`,
-          "",
-          "We look forward to welcoming you!",
-        ].join("\n"),
-      });
-    } catch (emailError) {
-      console.error(
-        "Booking was created, but its confirmation email failed:",
-        emailError,
-      );
-    }
- 
-    res.status(201).json({
-      success: true,
-      data: booking,
+    await tx.booking.update({
+      where: { id: booking.id },
+      data: { status: "CANCELLED" },
     });
+  });
+
+  throw stripeError;
+}
+
   } catch (error) {
     console.error("Failed to create booking:", error);
 

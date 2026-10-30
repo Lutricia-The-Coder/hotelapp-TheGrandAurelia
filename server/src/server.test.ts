@@ -24,6 +24,9 @@ const {
   bookingDeleteMock,
   bookingFindUniqueMock,
     bookingAggregateMock,
+    paymentCreateMock,
+transactionMock,
+stripeCheckoutCreateMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -46,6 +49,9 @@ const {
   bookingUpdateMock: vi.fn(),
   bookingDeleteMock: vi.fn(),
   bookingAggregateMock: vi.fn(),
+  paymentCreateMock: vi.fn(),
+transactionMock: vi.fn(),
+stripeCheckoutCreateMock: vi.fn(),
 }));
 const TEST_JWT_SECRET = "test-only-secret-for-booking-tests";
 
@@ -109,10 +115,28 @@ vi.mock("./lib/prisma.js", () => ({
       delete: bookingDeleteMock,
       aggregate: bookingAggregateMock,
     },
+    $transaction: transactionMock,
+
+payment: {
+  create: paymentCreateMock,
+  findUnique: vi.fn(),
+  findFirst: vi.fn(),
+  update: vi.fn(),
+  updateMany: vi.fn(),
+},
   },
 }));
 
-
+vi.mock("./lib/stripe.js", () => ({
+  getStripeClient: () => ({
+    checkout: {
+      sessions: {
+        create: stripeCheckoutCreateMock,
+      },
+    },
+  }),
+  getFrontendUrl: () => "http://localhost:5173",
+}));
 import app from "./app.js";
 
 describe("Health API", () => {
@@ -623,7 +647,34 @@ userFindUniqueMock.mockResolvedValue({
   id: "user-test-1",
 });
   it("creates a booking with valid data", async () => {
-    
+    transactionMock.mockImplementation(
+  async (callback: (tx: {
+    booking: { create: typeof bookingCreateMock };
+    payment: { create: typeof paymentCreateMock };
+  }) => Promise<unknown>) =>
+    callback({
+      booking: {
+        create: bookingCreateMock,
+      },
+      payment: {
+        create: paymentCreateMock,
+      },
+    }),
+);
+
+paymentCreateMock.mockResolvedValue({
+  id: "payment-test-1",
+  bookingId: "booking-test-2",
+  amount: 2400,
+  currency: "ZAR",
+  provider: "stripe",
+  status: "PENDING",
+});
+
+stripeCheckoutCreateMock.mockResolvedValue({
+  id: "cs_test_session_1",
+  url: "https://checkout.stripe.com/c/pay/cs_test_session_1",
+});
 roomFindUniqueMock.mockResolvedValue({
   id: "room-test-1",
   pricePerNight: 1200,
@@ -659,8 +710,19 @@ userFindUniqueMock.mockResolvedValue({
     roomQuantity: 1,
   });
     expect(response.status).toBe(201);
-    expect(response.body.success).toBe(true);
-    expect(bookingCreateMock).toHaveBeenCalledOnce();
+expect(response.body.success).toBe(true);
+
+expect(bookingCreateMock).toHaveBeenCalledOnce();
+expect(paymentCreateMock).toHaveBeenCalledOnce();
+expect(transactionMock).toHaveBeenCalledOnce();
+
+expect(response.body.checkoutUrl).toBe(
+  "https://checkout.stripe.com/c/pay/cs_test_session_1",
+);
+
+expect(response.body.paymentId).toBe("payment-test-1");
+
+expect(stripeCheckoutCreateMock).toHaveBeenCalledOnce();
   });
 
 // Additional test cases for booking creation and cancellation  

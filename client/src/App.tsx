@@ -1,7 +1,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  API_BASE_URL,createBooking,getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
+API_BASE_URL,createBooking,getPaymentStatus,cancelPendingCheckout,
+  getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
   updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
 import "./index.css";
 import { useDispatch, useSelector } from "react-redux";
@@ -656,13 +657,21 @@ dispatch(clearUser());
       token,
     );
 
-    if (!result.success || !result.data) {
-      throw new Error(result.message || "Booking could not be completed.");
-    }
-dispatch(setBookingConfirmation(result.data));
-    setBookingMessage(
-      `Booking created successfully! Total: R${Number(result.data.totalPrice).toFixed(2)}`,
-    );
+  
+if (!result.success || !result.data || !result.checkoutUrl) {
+  throw new Error(
+    result.message || "Unable to start Stripe checkout.",
+  );
+}
+
+dispatch(setBookingConfirmation(null));
+
+setBookingMessage(
+  "Your booking is ready. Redirecting to secure payment...",
+);
+
+window.location.assign(result.checkoutUrl);
+
   } catch (err) {
     setBookingError(
       err instanceof Error
@@ -728,6 +737,227 @@ dispatch(setBookingConfirmation(result.data));
   }, []);
 
   const allBranches = Object.values(branches).flat();
+  
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const paymentResult = params.get("payment");
+
+  if (!paymentResult) return;
+
+  const sessionId = params.get("session_id");
+  let active = true;
+
+  function clearPaymentParams() {
+    const url = new URL(window.location.href);
+
+    url.searchParams.delete("payment");
+    url.searchParams.delete("session_id");
+    url.searchParams.delete("booking_id");
+
+    window.history.replaceState(
+      {},
+      document.title,
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }
+
+  async function handlePaymentReturn() {
+    const token = sessionStorage.getItem("hotelAuthToken");
+
+  
+if (paymentResult === "cancelled") {
+  const bookingId = params.get("booking_id");
+
+  setBookingMessage("");
+  setBookingError("");
+
+  if (!token || !bookingId) {
+    setBookingError(
+      "Checkout was cancelled. Please sign in to check your reservation status.",
+    );
+    clearPaymentParams();
+    return;
+  }
+
+  try {
+    // Ask the backend to expire the open Stripe Checkout Session.
+    const { sessionId } = await cancelPendingCheckout(
+      bookingId,
+      token,
+    );
+
+    let latestPayment:
+      | Awaited<ReturnType<typeof getPaymentStatus>>
+      | null = null;
+
+    // Wait for Stripe's expiration webhook to update the database.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (!active) return;
+
+      latestPayment = await getPaymentStatus(sessionId, token);
+
+      if (
+        latestPayment.paymentStatus !== "PENDING" ||
+        latestPayment.booking.status !== "PENDING"
+      ) {
+        break;
+      }
+
+      if (attempt < 9) {
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 1200),
+        );
+      }
+    }
+
+    if (!active) return;
+
+    await handleLoadMyBookings();
+
+    if (
+      latestPayment?.paymentStatus === "FAILED" &&
+      latestPayment.booking.status === "CANCELLED"
+    ) {
+      setBookingMessage(
+        "Checkout cancelled. Your unpaid reservation has been released.",
+      );
+    } else {
+      setBookingMessage(
+        "Checkout was cancelled. Your reservation is being updated. Please check My Bookings shortly.",
+      );
+    }
+  } catch (error) {
+    if (!active) return;
+
+    setBookingError(
+      error instanceof Error
+        ? error.message
+        : "Unable to cancel your pending checkout.",
+    );
+  } finally {
+    if (active) {
+      clearPaymentParams();
+    }
+  }
+
+  return;
+}
+
+    if (paymentResult !== "success" || !sessionId) {
+      setBookingError("Invalid payment return information.");
+      clearPaymentParams();
+      return;
+    }
+
+    if (!token) {
+      setBookingError(
+        "Please sign in again to check your payment status.",
+      );
+      setAuthMode("login");
+      clearPaymentParams();
+      return;
+    }
+
+    setBookingLoading(true);
+    setBookingError("");
+    setBookingMessage("Verifying your payment with Stripe...");
+
+    try {
+      let latestPayment: Awaited<
+        ReturnType<typeof getPaymentStatus>
+      > | null = null;
+
+      // Allow time for Stripe's webhook to update the database.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (!active) return;
+
+        latestPayment = await getPaymentStatus(sessionId, token);
+
+        if (
+          latestPayment.paymentStatus !== "PENDING" ||
+          latestPayment.booking.status !== "PENDING"
+        ) {
+          break;
+        }
+
+        if (attempt < 9) {
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, 1200),
+          );
+        }
+      }
+
+      if (!active || !latestPayment) return;
+
+      if (
+        latestPayment.paymentStatus === "SUCCEEDED" &&
+        latestPayment.booking.status === "CONFIRMED"
+      ) {
+        dispatch(
+          setBookingConfirmation(latestPayment.booking),
+        );
+
+        setBookingMessage(
+          "Payment successful! Your reservation is confirmed.",
+        );
+
+        await handleLoadMyBookings();
+      } else if (
+        latestPayment.paymentStatus === "SUCCEEDED"
+      ) {
+        dispatch(setBookingConfirmation(null));
+        setBookingMessage("");
+
+        setBookingError(
+          "Payment was received, but your reservation could not be confirmed. Please contact support before attempting another payment.",
+        );
+      } else if (
+        latestPayment.paymentStatus === "FAILED" ||
+        latestPayment.paymentStatus === "REFUNDED" ||
+        latestPayment.booking.status === "CANCELLED"
+      ) {
+        dispatch(setBookingConfirmation(null));
+        setBookingMessage("");
+
+        setBookingError(
+          "Your payment was not completed and your reservation is not confirmed.",
+        );
+
+        await handleLoadMyBookings();
+      } else {
+        dispatch(setBookingConfirmation(null));
+
+        setBookingMessage(
+          "Your payment is still processing. Your reservation is not confirmed yet. Please check My Bookings again shortly.",
+        );
+
+        await handleLoadMyBookings();
+      }
+    } catch (error) {
+      if (!active) return;
+
+      setBookingMessage("");
+
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify your payment. Please try again.",
+      );
+    } finally {
+      if (active) {
+        setBookingLoading(false);
+        clearPaymentParams();
+      }
+    }
+  }
+
+  void handlePaymentReturn();
+
+  return () => {
+    active = false;
+  };
+}, []);
+
   const allRooms = Object.values(rooms).flat();
   const lowestPrice = allRooms.length
     ? Math.min(...allRooms.map((room) => room.pricePerNight))

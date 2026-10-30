@@ -106,6 +106,7 @@ export type CreateBookingInput = {
   roomTypeId: string;
 };
 
+
 export type BookingResponse = {
   success: boolean;
   data?: {
@@ -115,9 +116,82 @@ export type BookingResponse = {
     totalPrice: number | string;
     roomTypeId: string;
     userId: string;
+    status?: string;
   };
+  checkoutUrl?: string;
+  paymentId?: string;
   message?: string;
 };
+
+export type PaymentStatusResult = {
+  paymentStatus: "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+  booking: {
+    id: string;
+    checkIn: string;
+    checkOut: string;
+    totalPrice: number | string;
+    roomTypeId: string;
+    userId: string;
+    status: string;
+  };
+};
+
+export async function getPaymentStatus(
+  sessionId: string,
+  token: string,
+): Promise<PaymentStatusResult> {
+  const response = await fetch(
+    `${API_BASE_URL}/payments/session/${encodeURIComponent(sessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    data?: PaymentStatusResult;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(
+      result.message || "Unable to retrieve payment status.",
+    );
+  }
+
+  return result.data;
+}
+
+export async function cancelPendingCheckout(
+  bookingId: string,
+  token: string,
+): Promise<{ sessionId: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/payments/bookings/${encodeURIComponent(bookingId)}/cancel-checkout`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    data?: { sessionId: string };
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(
+      result.message || "Unable to cancel pending checkout.",
+    );
+  }
+
+  return result.data;
+}
 
 export type AuthUser = {
   id: string;

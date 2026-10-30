@@ -8,10 +8,12 @@ import bookingsRouter from "./routes/bookings.js";
 import authRouter from "./routes/auth.js";
 import favoritesRouter from "./routes/favorites.js";
 import reviewsRouter from "./routes/reviews.js";
-
+import paymentsRouter from "./routes/payments.js";
 const app = express();
 
 app.use(cors());
+app.use("/api/v1/payments", paymentsRouter);
+
 app.use(express.json());
 
 app.use("/api/v1/hotels", hotelsRouter);
