@@ -9,6 +9,7 @@ import authRouter from "./routes/auth.js";
 import favoritesRouter from "./routes/favorites.js";
 import reviewsRouter from "./routes/reviews.js";
 import paymentsRouter from "./routes/payments.js";
+import usersRouter from "./routes/users.js";
 const app = express();
 
 app.use(cors());
@@ -23,6 +24,7 @@ app.use("/api/v1/bookings", bookingsRouter);
 app.use("/api/v1/favorites", favoritesRouter);
 app.use("/api/v1/reviews", reviewsRouter);
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/users", usersRouter);
 
 app.get("/", (_req, res) => {
   res.status(200).send("Hotel Booking API is running!");

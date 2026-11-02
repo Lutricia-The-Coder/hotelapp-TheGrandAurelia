@@ -96,7 +96,7 @@ export async function cancelBooking(
   };
 }
 
-const API_BASE_URL = "http://localhost:3000/api/v1";
+export const API_BASE_URL = "http://localhost:3000/api/v1";
 export type CreateBookingInput = {
   checkIn: string;
   checkOut: string;
@@ -199,7 +199,97 @@ export type AuthUser = {
   email: string;
   role: string;
 };
+export type UserProfile = {
+  id: string;
+  name: string | null;
+  title: string | null;
+  email: string;
+  image: string | null;
+  createdAt: string;
+  updatedAt: string;
+hasPassword: boolean;
+};
 
+export type UpdateProfileInput = {
+  name: string | null;
+  title: string | null;
+};
+
+export async function getMyProfile(
+  token: string,
+): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/users/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result: {
+    success: boolean;
+    data?: UserProfile;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(result.message || "Unable to load your profile.");
+  }
+
+  return result.data;
+}
+
+export async function updateMyProfile(
+  updates: UpdateProfileInput,
+  token: string,
+): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/users/me`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const result: {
+    success: boolean;
+    data?: UserProfile;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(result.message || "Unable to update your profile.");
+  }
+
+  return result.data;
+}
+export async function changeMyPassword(
+  input: {
+    currentPassword?: string;
+    newPassword: string;
+    confirmNewPassword: string;
+  },
+  token: string,
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/users/me/password`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result: {
+    success: boolean;
+    message: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Unable to change your password.");
+  }
+
+  return result;
+}
 type AuthResponse = {
   message: string;
   token?: string;
@@ -522,4 +612,4 @@ export async function submitHotelReview(
   return result.data;
 }
 
-export { API_BASE_URL };
+

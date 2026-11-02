@@ -1,14 +1,16 @@
 
 import { useEffect, useState } from "react";
 import {
-API_BASE_URL,createBooking,getPaymentStatus,cancelPendingCheckout,
+API_BASE_URL,changeMyPassword,createBooking,getPaymentStatus,cancelPendingCheckout,
   getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
-  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,type AuthUser} from "./api";
+  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,type AuthUser,getMyProfile,
+updateMyProfile,
+type UserProfile,} from "./api";
 import "./index.css";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store/store";
 import { setUser, clearUser } from "./store/authSlice";
-
+import AdminAccommodation from "./AdminAccommodation";
 import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
 
 
@@ -91,7 +93,20 @@ const [bookingQuantity, setBookingQuantity] = useState(1);
 const [bookingMessage, setBookingMessage] = useState("");
 const [bookingError, setBookingError] = useState("");
 const [bookingLoading, setBookingLoading] = useState(false);
-
+const [showProfile, setShowProfile] = useState(false);
+const [profile, setProfile] = useState<UserProfile | null>(null);
+const [profileName, setProfileName] = useState("");
+const [profileTitle, setProfileTitle] = useState("");
+const [profileLoading, setProfileLoading] = useState(false);
+const [profileSaving, setProfileSaving] = useState(false);
+const [profileError, setProfileError] = useState("");
+const [profileMessage, setProfileMessage] = useState("");
+const [passwordCurrent, setPasswordCurrent] = useState("");
+const [passwordNew, setPasswordNew] = useState("");
+const [passwordConfirm, setPasswordConfirm] = useState("");
+const [passwordSaving, setPasswordSaving] = useState(false);
+const [passwordError, setPasswordError] = useState("");
+const [passwordMessage, setPasswordMessage] = useState("");
 
 const myBookings = useSelector(
   (state: RootState) => state.bookings.bookings,
@@ -119,7 +134,8 @@ const [adminBookingsError, setAdminBookingsError] = useState("");
 const [adminBookingsMessage, setAdminBookingsMessage] = useState("");
 const [adminActionBookingId, setAdminActionBookingId] = useState<string | null>(null);
 const [showAdminBookings, setShowAdminBookings] = useState(false);
-
+const [showAdminAccommodation, setShowAdminAccommodation] =
+  useState(false);
 const [favoriteHotelIds, setFavoriteHotelIds] = useState<string[]>([]);
 const [favoriteHotels, setFavoriteHotels] = useState<FavoriteHotel[]>([]);
 const [favoritesLoading, setFavoritesLoading] = useState(false);
@@ -164,7 +180,154 @@ async function handleLoadAdminBookings() {
     setAdminBookingsLoading(false);
   }
 }
+async function handleLoadProfile() {
+  const token = sessionStorage.getItem("hotelAuthToken");
 
+  if (!token || !authUser) {
+    setAuthMode("login");
+    setAuthError("Please sign in to view your profile.");
+    return;
+  }
+
+  setProfileLoading(true);
+  setProfileError("");
+  setProfileMessage("");
+
+  try {
+    const result = await getMyProfile(token);
+
+    setProfile(result);
+    setProfileName(result.name ?? "");
+    setProfileTitle(result.title ?? "");
+  } catch (error) {
+    setProfileError(
+      error instanceof Error
+        ? error.message
+        : "Unable to load your profile.",
+    );
+  } finally {
+    setProfileLoading(false);
+  }
+}
+
+async function handleSaveProfile(
+  event: React.FormEvent<HTMLFormElement>,
+) {
+  event.preventDefault();
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token || !authUser) {
+    setProfileError("Your session has expired. Please sign in again.");
+    return;
+  }
+
+  if (profileName.trim().length < 2) {
+    setProfileError("Your name must contain at least 2 characters.");
+    return;
+  }
+
+  setProfileSaving(true);
+  setProfileError("");
+  setProfileMessage("");
+
+  try {
+    const updated = await updateMyProfile(
+      {
+        name: profileName.trim(),
+        title: profileTitle || null,
+      },
+      token,
+    );
+
+    setProfile(updated);
+    setProfileName(updated.name ?? "");
+    setProfileTitle(updated.title ?? "");
+
+    const updatedAuthUser: AuthUser = {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      role: authUser.role,
+    };
+
+    sessionStorage.setItem(
+      "hotelAuthUser",
+      JSON.stringify(updatedAuthUser),
+    );
+
+    dispatch(setUser(updatedAuthUser));
+
+    setProfileMessage("Your profile has been updated successfully.");
+  } catch (error) {
+    setProfileError(
+      error instanceof Error
+        ? error.message
+        : "Unable to update your profile.",
+    );
+  } finally {
+    setProfileSaving(false);
+  }
+}
+
+async function handleChangePassword(
+  event: React.FormEvent<HTMLFormElement>,
+) {
+  event.preventDefault();
+
+  if (!profile) return;
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+
+  if (!token) {
+    setPasswordError("Your session has expired. Please sign in again.");
+    return;
+  }
+
+  if (passwordNew.length < 8) {
+    setPasswordError("Your new password must contain at least 8 characters.");
+    return;
+  }
+
+  if (passwordNew !== passwordConfirm) {
+    setPasswordError("Your new passwords do not match.");
+    return;
+  }
+
+  setPasswordSaving(true);
+  setPasswordError("");
+  setPasswordMessage("");
+
+  try {
+    const result = await changeMyPassword(
+      {
+        ...(profile.hasPassword
+          ? { currentPassword: passwordCurrent }
+          : {}),
+        newPassword: passwordNew,
+        confirmNewPassword: passwordConfirm,
+      },
+      token,
+    );
+
+    setPasswordMessage(result.message);
+    setPasswordCurrent("");
+    setPasswordNew("");
+    setPasswordConfirm("");
+
+    setProfile((previous) =>
+      previous ? { ...previous, hasPassword: true } : previous,
+    );
+  } catch (error) {
+    setPasswordError(
+      error instanceof Error
+        ? error.message
+        : "Unable to change your password.",
+    );
+  } finally {
+    setPasswordSaving(false);
+  }
+}
 async function handleAdminBookingStatus(
   bookingId: string,
   status: "CONFIRMED" | "CANCELLED",
@@ -1127,7 +1290,29 @@ const prices = hotelBranches
     <span className="login-link">
       Welcome, {authUser.name || authUser.email}
     </span>
+<button
+  type="button"
+  className="login-link sign-out-button"
+  disabled={profileLoading}
+  onClick={async () => {
+    if (showProfile) {
+      setShowProfile(false);
+      return;
+    }
 
+    setShowProfile(true);
+    await handleLoadProfile();
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("my-profile")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }}
+>
+  {profileLoading ? "Loading profile..." : "My Profile"}
+</button>
     <button
       type="button"
       className="login-link sign-out-button"
@@ -1191,8 +1376,31 @@ const prices = hotelBranches
             ? "Hide Admin Reservations"
             : "Admin Reservations"}
       </button>
+      
     )}
+<button
+  type="button"
+  className="login-link sign-out-button"
+  onClick={() => {
+    const nextState = !showAdminAccommodation;
+    setShowAdminAccommodation(nextState);
 
+    if (nextState) {
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById("admin-accommodation")
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      });
+    }
+  }}
+>
+  {showAdminAccommodation
+    ? "Hide Accommodation Management"
+    : "Manage Accommodation"}
+</button>
     <button
       type="button"
       className="login-link sign-out-button"
@@ -1221,7 +1429,9 @@ const prices = hotelBranches
 
 
       </header>
-
+{authUser?.role === "ADMIN" && showAdminAccommodation && (
+  <AdminAccommodation />
+)}
       <main>
         
 {authMode !== null && (
@@ -2197,7 +2407,227 @@ const prices = hotelBranches
           </div>
           <a className="gold-button" href="#rooms">Find your stay <span>→</span></a>
         </section>
-        
+        {authUser && showProfile && (
+  <section
+    id="my-profile"
+    className="my-bookings-section profile-section"
+  >
+    <h2>My Profile</h2>
+    <p>Manage your personal details at The Grand Aurelia.</p>
+
+    {profileLoading && <p>Loading your profile...</p>}
+
+    {profileError && (
+      <p className="auth-feedback auth-feedback-error" role="alert">
+        {profileError}
+      </p>
+    )}
+
+    {profileMessage && (
+      <p className="auth-feedback" role="status">
+        {profileMessage}
+      </p>
+    )}
+
+    {profile && !profileLoading && (
+      <>
+        <div className="profile-summary">
+          {profile.image ? (
+            <img
+              src={profile.image}
+              alt="Profile"
+              className="profile-avatar"
+            />
+          ) : (
+            <div className="profile-avatar profile-avatar-placeholder">
+              {(profile.name || profile.email).charAt(0).toUpperCase()}
+            </div>
+          )}
+
+          <div>
+            <h3>{profile.name || "Guest"}</h3>
+            <p>{profile.email}</p>
+            <small>
+              Member since{" "}
+              {new Date(profile.createdAt).toLocaleDateString("en-ZA")}
+            </small>
+          </div>
+        </div>
+
+        <form
+          className="profile-form"
+          onSubmit={handleSaveProfile}
+        >
+          <label className="auth-label">
+            Title
+            <select
+              value={profileTitle}
+              onChange={(event) => setProfileTitle(event.target.value)}
+            >
+              <option value="">Select your title</option>
+              <option value="Mr">Mr</option>
+              <option value="Mrs">Mrs</option>
+              <option value="Ms">Ms</option>
+              <option value="Miss">Miss</option>
+              <option value="Dr">Dr</option>
+              <option value="Prof">Prof</option>
+            </select>
+          </label>
+
+          <label className="auth-label">
+            Full name
+            <input
+              type="text"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              minLength={2}
+              maxLength={100}
+              required
+            />
+          </label>
+
+          <label className="auth-label">
+            Email address
+            <input
+              type="email"
+              value={profile.email}
+              readOnly
+              disabled
+            />
+            <small>Email changes require a separate verification process.</small>
+          </label>
+
+          <button
+            type="submit"
+            className="gold-button"
+            disabled={profileSaving}
+          >
+            {profileSaving ? "Saving..." : "Save Profile"}
+          </button>
+
+          <button
+            type="button"
+            className="login-link sign-out-button"
+            disabled={profileSaving}
+            onClick={() => {
+              setProfileName(profile.name ?? "");
+              setProfileTitle(profile.title ?? "");
+              setProfileError("");
+              setProfileMessage("");
+            }}
+          >
+            Reset Changes
+          </button>
+        </form>
+<div className="profile-password-section">
+  <h3>{profile.hasPassword ? "Change Password" : "Set a Password"}</h3>
+
+  <p>
+    {profile.hasPassword
+      ? "Update your account password securely."
+      : "You signed in with Google. You can also set a password to sign in using your email address."}
+  </p>
+
+  {passwordError && (
+    <p className="auth-feedback auth-feedback-error" role="alert">
+      {passwordError}
+    </p>
+  )}
+
+  {passwordMessage && (
+    <p className="auth-feedback" role="status">
+      {passwordMessage}
+    </p>
+  )}
+
+  <form onSubmit={handleChangePassword} className="profile-form">
+    {profile.hasPassword && (
+      <label className="auth-label">
+        Current password
+        <input
+          type="password"
+          value={passwordCurrent}
+          onChange={(event) => setPasswordCurrent(event.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+    )}
+
+    <label className="auth-label">
+      New password
+      <input
+        type="password"
+        value={passwordNew}
+        onChange={(event) => setPasswordNew(event.target.value)}
+        autoComplete="new-password"
+        minLength={8}
+        required
+      />
+    </label>
+
+    <label className="auth-label">
+      Confirm new password
+      <input
+        type="password"
+        value={passwordConfirm}
+        onChange={(event) => setPasswordConfirm(event.target.value)}
+        autoComplete="new-password"
+        minLength={8}
+        required
+      />
+    </label>
+
+    <button
+      type="submit"
+      className="gold-button"
+      disabled={passwordSaving}
+    >
+      {passwordSaving
+        ? "Updating password..."
+        : profile.hasPassword
+          ? "Change Password"
+          : "Set Password"}
+    </button>
+  </form>
+</div>
+        <div className="profile-shortcuts">
+          <button
+            type="button"
+            className="login-link sign-out-button"
+            onClick={async () => {
+              await handleLoadMyBookings();
+
+              document.getElementById("my-bookings")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
+          >
+            View My Bookings
+          </button>
+
+          <button
+            type="button"
+            className="login-link sign-out-button"
+            onClick={async () => {
+              await handleLoadFavorites();
+
+              window.requestAnimationFrame(() => {
+                document.getElementById("favorite-hotels")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              });
+            }}
+          >
+            View My Favourites
+          </button>
+        </div>
+      </>
+    )}
+  </section>
+)}
 {showMyBookings && (
 <section id="my-bookings" className="my-bookings-section">
       <h2>My Bookings</h2>

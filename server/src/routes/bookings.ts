@@ -99,7 +99,7 @@ router.get(
 );
 
 
- // PATCH /api/v1/bookings/admin/:id/status
+// PATCH /api/v1/bookings/admin/:id/status
 router.patch(
   "/admin/:id/status",
   requireAuth,
@@ -127,6 +127,13 @@ router.patch(
 
       const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
+        include: {
+          payments: {
+            select: {
+              status: true,
+            },
+          },
+        },
       });
 
       if (!booking) {
@@ -144,6 +151,38 @@ router.patch(
         res.status(400).json({
           success: false,
           message: `A ${booking.status.toLowerCase()} booking cannot be changed`,
+        });
+        return;
+      }
+
+      const hasSuccessfulPayment = booking.payments.some(
+        (payment) => payment.status === "SUCCEEDED",
+      );
+
+      const hasPendingPayment = booking.payments.some(
+        (payment) => payment.status === "PENDING",
+      );
+
+      if (status === "CONFIRMED" && !hasSuccessfulPayment) {
+        res.status(409).json({
+          success: false,
+          message: "A reservation can only be confirmed after successful payment.",
+        });
+        return;
+      }
+
+      if (status === "CANCELLED" && hasSuccessfulPayment) {
+        res.status(409).json({
+          success: false,
+          message: "This reservation has been paid. Process the refund before cancelling it.",
+        });
+        return;
+      }
+
+      if (status === "CANCELLED" && hasPendingPayment) {
+        res.status(409).json({
+          success: false,
+          message: "This reservation has a pending payment. Expire its checkout before cancelling it.",
         });
         return;
       }
@@ -171,7 +210,6 @@ router.patch(
     }
   },
 );
-
 router.patch(
   "/admin/:id",
   requireAuth,
@@ -189,9 +227,16 @@ router.patch(
         return;
       }
 
-      const existing = await prisma.booking.findUnique({
-        where: { id: bookingId },
-      });
+  const existing = await prisma.booking.findUnique({
+  where: { id: bookingId },
+  include: {
+    payments: {
+      select: {
+        status: true,
+      },
+    },
+  },
+});
 
       if (!existing) {
         res.status(404).json({
@@ -200,7 +245,20 @@ router.patch(
         });
         return;
       }
+const hasProtectedPayment = existing.payments.some(
+  (payment) =>
+    payment.status === "PENDING" ||
+    payment.status === "SUCCEEDED",
+);
 
+if (hasProtectedPayment) {
+  res.status(409).json({
+    success: false,
+    message:
+      "This reservation has a pending or successful payment. Payment adjustments must be handled before modifying it.",
+  });
+  return;
+}
       if (
         existing.status === "CANCELLED" ||
         existing.status === "COMPLETED"
