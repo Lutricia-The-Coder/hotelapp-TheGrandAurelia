@@ -164,26 +164,28 @@ model Favorite {
   @@id([userId, hotelId])
   @@index([hotelId])
 }
-
 model Payment {
-  id                String        @id @default(uuid()) @db.Uuid
-  amount            Decimal       @db.Decimal(10, 2)
-  currency          String        @default("USD")
-  status            PaymentStatus @default(PENDING)
-  provider          String
-  providerPaymentId String?       @unique
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                      String        @id @default(uuid()) @db.Uuid
+  amount                  Decimal       @db.Decimal(10, 2)
+  currency                String        @default("USD")
+  status                  PaymentStatus @default(PENDING)
+  provider                String
+  providerPaymentId       String?       @unique
+  providerPaymentIntentId String?       @unique
+  providerRefundId        String?       @unique
+  refundAttempt           Int           @default(0)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   bookingId String  @db.Uuid
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 
   @@index([bookingId, status])
 }
-
 enum PaymentStatus {
   PENDING
   SUCCEEDED
+  REFUND_PENDING
   FAILED
   REFUNDED
 }

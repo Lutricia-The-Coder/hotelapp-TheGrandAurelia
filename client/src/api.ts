@@ -67,12 +67,20 @@ export async function getUserBookings(
   return result.data ?? [];
 }
 
+export type CancellationResult = {
+  success: boolean;
+  message: string;
+  refundPending: boolean;
+  bookingStatus: string;
+  paymentStatus: string | null;
+};
+
 export async function cancelBooking(
   bookingId: string,
   token: string,
-): Promise<{ success: boolean; message: string }> {
+): Promise<CancellationResult> {
   const response = await fetch(
-    `${API_BASE_URL}/bookings/${bookingId}/cancel`,
+    `${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/cancel`,
     {
       method: "PATCH",
       headers: {
@@ -84,6 +92,11 @@ export async function cancelBooking(
   const result: {
     success: boolean;
     message?: string;
+    data?: {
+      refundPending?: boolean;
+      bookingStatus?: string;
+      paymentStatus?: string | null;
+    };
   } = await response.json();
 
   if (!response.ok || !result.success) {
@@ -92,7 +105,10 @@ export async function cancelBooking(
 
   return {
     success: true,
-    message: result.message || "Booking cancelled successfully.",
+    message: result.message || "Cancellation request processed.",
+    refundPending: result.data?.refundPending ?? false,
+    bookingStatus: result.data?.bookingStatus ?? "PENDING",
+    paymentStatus: result.data?.paymentStatus ?? null,
   };
 }
 
@@ -411,7 +427,7 @@ export async function updateAdminBookingStatus(
   bookingId: string,
   status: "CONFIRMED" | "CANCELLED",
   token: string,
-): Promise<void> {
+): Promise<{ message: string; refundPending: boolean }> {
   const response = await fetch(
     `${API_BASE_URL}/bookings/admin/${encodeURIComponent(bookingId)}/status`,
     {
@@ -427,13 +443,20 @@ export async function updateAdminBookingStatus(
   const result: {
     success: boolean;
     message?: string;
+    data?: {
+      refundPending?: boolean;
+    };
   } = await response.json();
 
   if (!response.ok || !result.success) {
     throw new Error(result.message || "Failed to update reservation.");
   }
-}
 
+  return {
+    message: result.message || "Reservation updated.",
+    refundPending: result.data?.refundPending ?? false,
+  };
+}
 export async function modifyAdminBooking(
   bookingId: string,
   changes: {

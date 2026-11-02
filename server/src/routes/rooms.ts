@@ -177,17 +177,82 @@ if (typeof branchId !== "string") {
       data.pricePerNight = pricePerNight;
     }
 
-    if (totalRooms !== undefined) {
-      if (!Number.isInteger(totalRooms) || totalRooms < 1) {
-        res.status(400).json({
-          success: false,
-          message: "Total rooms must be a positive integer",
-        });
-        return;
-      }
-      data.totalRooms = totalRooms;
+if (totalRooms !== undefined) {
+  if (!Number.isInteger(totalRooms) || totalRooms < 1) {
+    res.status(400).json({
+      success: false,
+      message: "Total rooms must be a positive integer",
+    });
+    return;
+  }
+
+  const existingBookings = await prisma.booking.findMany({
+    where: {
+      roomTypeId: branchId,
+      status: {
+        in: ["PENDING", "CONFIRMED"],
+      },
+      checkOut: {
+        gt: new Date(),
+      },
+    },
+    select: {
+      checkIn: true,
+      checkOut: true,
+      roomQuantity: true,
+    },
+  });
+
+  const events: { time: number; change: number }[] = [];
+
+  for (const booking of existingBookings) {
+    events.push(
+      {
+        time: booking.checkIn.getTime(),
+        change: booking.roomQuantity,
+      },
+      {
+        time: booking.checkOut.getTime(),
+        change: -booking.roomQuantity,
+      },
+    );
+  }
+
+  events.sort((a, b) => a.time - b.time);
+
+  let currentRooms = 0;
+  let maximumBookedRooms = 0;
+  let index = 0;
+
+  while (index < events.length) {
+    const time = events[index].time;
+    let change = 0;
+
+    while (
+      index < events.length &&
+      events[index].time === time
+    ) {
+      change += events[index].change;
+      index++;
     }
 
+    currentRooms += change;
+    maximumBookedRooms = Math.max(
+      maximumBookedRooms,
+      currentRooms,
+    );
+  }
+
+  if (totalRooms < maximumBookedRooms) {
+    res.status(409).json({
+      success: false,
+      message: `At least ${maximumBookedRooms} rooms are already reserved during overlapping dates. Inventory cannot be reduced below this quantity.`,
+    });
+    return;
+  }
+
+  data.totalRooms = totalRooms;
+}
     if (Object.keys(data).length === 0) {
       res.status(400).json({
         success: false,

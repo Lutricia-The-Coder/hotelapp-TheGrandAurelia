@@ -126,6 +126,7 @@ const bookingConfirmation = useSelector(
 
 
 const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+const [cancellationMessage, setCancellationMessage] = useState("");
 const [showMyBookings, setShowMyBookings] = useState(false);
 
 const [adminBookings, setAdminBookings] = useState<AdminBooking[]>([]);
@@ -350,15 +351,15 @@ async function handleAdminBookingStatus(
   setAdminBookingsMessage("");
 
   try {
-    await updateAdminBookingStatus(bookingId, status, token);
+    const outcome = await updateAdminBookingStatus(
+  bookingId,
+  status,
+  token,
+);
 
     const bookings = await getAdminBookings(token);
     setAdminBookings(bookings);
-    setAdminBookingsMessage(
-      status === "CONFIRMED"
-        ? "Reservation confirmed successfully."
-        : "Reservation cancelled successfully.",
-    );
+    setAdminBookingsMessage(outcome.message);
   } catch (err) {
     setAdminBookingsError(
       err instanceof Error
@@ -736,16 +737,20 @@ async function handleCancelBooking(bookingId: string) {
 
   setCancellingBookingId(bookingId);
   dispatch(setBookingsError(""));
-
+setCancellationMessage("");
   try {
-    await cancelBooking(bookingId, token);
+   const outcome = await cancelBooking(bookingId, token);
 
-    dispatch(
-      updateBookingStatus({
-        bookingId,
-        status: "CANCELLED",
-      }),
-    );
+setCancellationMessage(outcome.message);
+
+if (outcome.bookingStatus === "CANCELLED") {
+  dispatch(
+    updateBookingStatus({
+      bookingId,
+      status: "CANCELLED",
+    }),
+  );
+}
   } catch (error) {
     dispatch(
       setBookingsError(
@@ -2630,8 +2635,14 @@ const prices = hotelBranches
 )}
 {showMyBookings && (
 <section id="my-bookings" className="my-bookings-section">
-      <h2>My Bookings</h2>
-    <p>Your reservations at The Grand Aurelia.</p>
+   <h2>My Bookings</h2>
+<p>Your reservations at The Grand Aurelia.</p>
+
+{cancellationMessage && (
+  <p role="status" className="booking-cancellation-message">
+    {cancellationMessage}
+  </p>
+)}
 
     {myBookingsLoading && <p>Loading your bookings...</p>}
 
