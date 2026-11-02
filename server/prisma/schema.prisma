@@ -14,64 +14,67 @@ model Hotel {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  branches    HotelBranch[]
-  images      HotelImage[]
-  reviews     Review[]
-  favorites   Favorite[]
+  branches  HotelBranch[]
+  images    HotelImage[]
+  reviews   Review[]
+  favorites Favorite[]
 }
 
 model HotelBranch {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  address     String
-  city        String
-  country     String
-  phone       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  address   String
+  city      String
+  country   String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  hotelId     String   @db.Uuid
-  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomTypes   RoomType[]
+  hotelId            String          @db.Uuid
+  hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypes          RoomType[]
   checkInTime        String?
-checkOutTime          String?
-cancellationPolicy    String?
-amenities     BranchAmenity[]
+  checkOutTime       String?
+  cancellationPolicy String?
+  amenities          BranchAmenity[]
+
   @@index([hotelId])
 }
 
 model RoomType {
-  id            String   @id @default(uuid()) @db.Uuid
+  id            String      @id @default(uuid()) @db.Uuid
   name          String
   description   String?
   capacity      Int
-  pricePerNight Decimal  @db.Decimal(10, 2)
-  totalRooms    Int      @default(1)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-   bookings Booking[]
-  branchId      String   @db.Uuid
+  pricePerNight Decimal     @db.Decimal(10, 2)
+  totalRooms    Int         @default(1)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  bookings      Booking[]
+  branchId      String      @db.Uuid
   branch        HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId])
 }
-model Booking {
-  id              String        @id @default(uuid()) @db.Uuid
-  checkIn         DateTime
-  checkOut        DateTime
-  adults          Int           @default(1)
-  children        Int           @default(0)
-  roomQuantity    Int           @default(1)
-  totalPrice      Decimal       @db.Decimal(10, 2)
-  status          BookingStatus @default(PENDING)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
 
-  roomTypeId      String        @db.Uuid
-  roomType        RoomType      @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
-  userId          String        @db.Uuid
-  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  payments        Payment[]
+model Booking {
+  id           String        @id @default(uuid()) @db.Uuid
+  checkIn      DateTime
+  checkOut     DateTime
+  adults       Int           @default(1)
+  children     Int           @default(0)
+  roomQuantity Int           @default(1)
+  totalPrice   Decimal       @db.Decimal(10, 2)
+  status       BookingStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  roomTypeId String    @db.Uuid
+  roomType   RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments   Payment[]
+
   @@index([roomTypeId, checkIn, checkOut])
   @@index([status])
 }
@@ -84,10 +87,11 @@ enum BookingStatus {
 }
 
 model User {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String?
-  title         String?
-  email         String   @unique
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String?
+  title        String?
+  email        String   @unique
+  googleId     String?  @unique
   passwordHash String?
   image        String?
   createdAt    DateTime @default(now())
@@ -96,7 +100,7 @@ model User {
   bookings  Booking[]
   reviews   Review[]
   favorites Favorite[]
-  role      UserRole  @default(GUEST)
+  role      UserRole   @default(GUEST)
 }
 
 model HotelImage {
@@ -106,8 +110,8 @@ model HotelImage {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
-  hotelId   String   @db.Uuid
-  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId String @db.Uuid
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([hotelId])
 }
@@ -117,7 +121,7 @@ model Amenity {
   name      String   @unique
   createdAt DateTime @default(now())
 
-  branches  BranchAmenity[]
+  branches BranchAmenity[]
 }
 
 model BranchAmenity {
@@ -125,8 +129,8 @@ model BranchAmenity {
   amenityId String   @db.Uuid
   createdAt DateTime @default(now())
 
-  branch    HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  amenity   Amenity     @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  branch  HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  amenity Amenity     @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([branchId, amenityId])
   @@index([amenityId])
@@ -139,11 +143,11 @@ model Review {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  hotelId   String   @db.Uuid
-  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId String @db.Uuid
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@unique([userId, hotelId])
   @@index([hotelId])
@@ -154,12 +158,13 @@ model Favorite {
   hotelId   String   @db.Uuid
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@id([userId, hotelId])
   @@index([hotelId])
 }
+
 model Payment {
   id                String        @id @default(uuid()) @db.Uuid
   amount            Decimal       @db.Decimal(10, 2)
@@ -170,8 +175,8 @@ model Payment {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  bookingId         String        @db.Uuid
-  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  bookingId String  @db.Uuid
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 
   @@index([bookingId, status])
 }

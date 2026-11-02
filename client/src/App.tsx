@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
 API_BASE_URL,createBooking,getPaymentStatus,cancelPendingCheckout,
   getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
-  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,} from "./api";
+  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,type AuthUser} from "./api";
 import "./index.css";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store/store";
@@ -682,7 +682,89 @@ window.location.assign(result.checkoutUrl);
     setBookingLoading(false);
   }
 }
+useEffect(() => {
+  const currentUrl = new URL(window.location.href);
+  const googleError = currentUrl.searchParams.get("google_error");
+  const hashParams = new URLSearchParams(
+    currentUrl.hash.replace(/^#/, ""),
+  );
 
+  const token = hashParams.get("google_token");
+  const userJson = hashParams.get("google_user");
+
+  if (googleError) {
+    currentUrl.searchParams.delete("google_error");
+    currentUrl.hash = "";
+
+    window.history.replaceState(
+      {},
+      document.title,
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+
+    setAuthMode("login");
+    setAuthMessage("");
+    setAuthError(
+      googleError === "access_denied"
+        ? "Google sign-in was cancelled."
+        : "Google sign-in could not be completed. Please try again.",
+    );
+    return;
+  }
+
+  if (!hashParams.has("google_token") && !hashParams.has("google_user")) {
+    return;
+  }
+
+  // Remove the token and user details from the address bar.
+  currentUrl.hash = "";
+
+  window.history.replaceState(
+    {},
+    document.title,
+    `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+  );
+
+  try {
+    if (!token || !userJson) {
+      throw new Error("Incomplete Google sign-in response.");
+    }
+
+    const parsedUser: unknown = JSON.parse(userJson);
+
+    if (typeof parsedUser !== "object" || parsedUser === null) {
+      throw new Error("Invalid Google user information.");
+    }
+
+    const user = parsedUser as Partial<AuthUser>;
+
+    if (
+      typeof user.id !== "string" ||
+      !(typeof user.name === "string" || user.name === null) ||
+      typeof user.email !== "string" ||
+      typeof user.role !== "string"
+    ) {
+      throw new Error("Invalid Google user information.");
+    }
+
+    sessionStorage.setItem("hotelAuthToken", token);
+    sessionStorage.setItem("hotelAuthUser", JSON.stringify(user));
+
+    dispatch(setUser(user as AuthUser));
+
+    setAuthMode(null);
+    setAuthError("");
+    setAuthMessage("");
+  } catch (error) {
+    console.error("Google sign-in handling failed:", error);
+
+    setAuthMode("login");
+    setAuthMessage("");
+    setAuthError(
+      "Unable to complete Google sign-in. Please try again.",
+    );
+  }
+}, [dispatch]);
   useEffect(() => {
     async function loadData() {
       try {
@@ -1280,6 +1362,20 @@ const prices = hotelBranches
       </form>
 
       <p className="auth-switch">
+            <div className="google-auth-divider">
+        <span>or</span>
+      </div>
+
+      <a
+        className="google-signin-button"
+        href={`${API_BASE_URL}/auth/google`}
+        aria-label="Continue with Google"
+      >
+        <span className="google-signin-mark" aria-hidden="true">
+          G
+        </span>
+        <span>Continue with Google</span>
+      </a>
         {authMode === "login"
           ? "New to The Grand Aurelia?"
           : "Already have an account?"}{" "}

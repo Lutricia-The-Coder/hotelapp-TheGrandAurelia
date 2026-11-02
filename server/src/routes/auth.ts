@@ -1,9 +1,44 @@
-
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma.js";
+import { OAuth2Client } from "google-auth-library";
+import jwt from "jsonwebtoken";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 const router = Router();
+
+const GOOGLE_STATE_COOKIE = "google_oauth_state";
+const GOOGLE_COOKIE_PATH = "/api/v1/auth/google";
+
+function createGoogleOAuthClient() {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const callbackUrl = process.env.GOOGLE_CALLBACK_URL?.trim();
+
+  if (!clientId || !clientSecret || !callbackUrl) {
+    throw new Error("Google OAuth configuration is incomplete.");
+  }
+
+  return {
+    clientId,
+    client: new OAuth2Client(
+      clientId,
+      clientSecret,
+      callbackUrl,
+    ),
+  };
+}
+
+
+function getGoogleStateCookie(cookieHeader: string | undefined) {
+  const entry = cookieHeader
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${GOOGLE_STATE_COOKIE}=`));
+
+  return entry?.slice(GOOGLE_STATE_COOKIE.length + 1);
+}
+
 
 router.post("/register", async (req, res) => {
   try {
@@ -115,7 +150,6 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const jwt = await import("jsonwebtoken");
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
@@ -126,7 +160,7 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const token = jwt.default.sign(
+    const token = jwt.sign(
       { sub: user.id, role: user.role },
       secret,
       { expiresIn: "1h" },
@@ -149,4 +183,194 @@ router.post("/login", async (req, res) => {
     });
   }
 });
+
+router.get("/google", (_req, res) => {
+  try {
+    const { client } = createGoogleOAuthClient();
+
+    const state = randomBytes(32).toString("hex");
+
+    res.cookie(GOOGLE_STATE_COOKIE, state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 10 * 60 * 1000,
+      path: GOOGLE_COOKIE_PATH,
+    });
+
+    const authorizationUrl = client.generateAuthUrl({
+      access_type: "online",
+      scope: ["openid", "email", "profile"],
+      state,
+      prompt: "select_account",
+    });
+
+    res.redirect(authorizationUrl);
+  } catch (error) {
+    console.error("Unable to start Google sign-in:", error);
+
+    res.redirect(
+      `${process.env.FRONTEND_URL || "http://localhost:5173"}/?google_error=configuration`,
+    );
+  }
+});
+
+router.get("/google/callback", async (req, res) => {
+  const frontendUrl =
+    process.env.FRONTEND_URL?.trim().replace(/\/+$/, "") ||
+    "http://localhost:5173";
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: GOOGLE_COOKIE_PATH,
+  };
+
+  const fail = (reason: string) => {
+    res.clearCookie(GOOGLE_STATE_COOKIE, cookieOptions);
+    res.redirect(
+      `${frontendUrl}/?google_error=${encodeURIComponent(reason)}`,
+    );
+  };
+
+  try {
+    if (typeof req.query.error === "string") {
+      fail("access_denied");
+      return;
+    }
+
+    const code = req.query.code;
+    const returnedState = req.query.state;
+    const savedState = getGoogleStateCookie(req.headers.cookie);
+
+    if (
+      typeof code !== "string" ||
+      typeof returnedState !== "string" ||
+      !savedState
+    ) {
+      fail("invalid_callback");
+      return;
+    }
+
+    const expectedState = Buffer.from(savedState, "utf8");
+    const actualState = Buffer.from(returnedState, "utf8");
+
+    if (
+      expectedState.length !== actualState.length ||
+      !timingSafeEqual(expectedState, actualState)
+    ) {
+      fail("invalid_state");
+      return;
+    }
+
+    // Clear the one-use state cookie after successful validation.
+    res.clearCookie(GOOGLE_STATE_COOKIE, cookieOptions);
+
+    const { client, clientId } = createGoogleOAuthClient();
+
+    const { tokens } = await client.getToken(code);
+
+    if (!tokens.id_token) {
+      throw new Error("Google did not return an ID token.");
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: clientId,
+    });
+
+    const profile = ticket.getPayload();
+
+    if (
+      !profile?.sub ||
+      !profile.email ||
+      profile.email_verified !== true
+    ) {
+      throw new Error("Google account identity or email is not verified.");
+    }
+
+    const normalizedEmail = profile.email.trim().toLowerCase();
+
+    // Google subject ID is the stable account identifier.
+    let user = await prisma.user.findUnique({
+      where: { googleId: profile.sub },
+    });
+
+    if (!user) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        if (
+          existingUser.googleId &&
+          existingUser.googleId !== profile.sub
+        ) {
+          throw new Error(
+            "This email is linked to a different Google account.",
+          );
+        }
+
+        // Link the verified Google identity without changing
+        // the existing user's password or role.
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            googleId: profile.sub,
+            name: existingUser.name ?? profile.name ?? null,
+            image: existingUser.image ?? profile.picture ?? null,
+          },
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            googleId: profile.sub,
+            name: profile.name ?? null,
+            email: normalizedEmail,
+            image: profile.picture ?? null,
+            passwordHash: null,
+            role: "GUEST",
+          },
+        });
+      }
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+      throw new Error("JWT_SECRET is not configured.");
+    }
+
+    // Issue the same application JWT used by email/password login.
+    const token = jwt.sign(
+      {
+        sub: user.id,
+        role: user.role,
+      },
+      jwtSecret,
+      { expiresIn: "1h" },
+    );
+
+    const clientUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+
+    // The fragment is not included in HTTP requests or referrer headers.The frontend stores the token in sessionStorage and immediately
+    // removes the fragment from the browser address bar.
+    const hash = new URLSearchParams({
+      google_token: token,
+      google_user: JSON.stringify(clientUser),
+    });
+
+    res.redirect(`${frontendUrl}/#${hash.toString()}`);
+  } catch (error) {
+    console.error("Google sign-in callback failed:", error);
+    fail("signin_failed");
+  }
+});
+
 export default router;

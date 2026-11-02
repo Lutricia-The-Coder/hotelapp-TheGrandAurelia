@@ -216,11 +216,11 @@ if (
       });
 
       if (!payment?.providerPaymentId) {
-        res.status(404).json({
+    return res.status(404).json({
           success: false,
           message: "Pending checkout not found.",
         });
-        return;
+        
       }
 
       const stripe = getStripeClient();
@@ -230,11 +230,11 @@ if (
       );
 
       if (session.status === "complete" || session.payment_status === "paid") {
-        res.status(409).json({
+        return res.status(409).json({
           success: false,
           message: "Payment has already been completed or is processing.",
         });
-        return;
+      
       }
 
       if (session.status === "open") {
@@ -242,11 +242,11 @@ if (
       }
 
       if (session.status !== "expired") {
-        res.status(409).json({
+        return res.status(409).json({
           success: false,
           message: "Checkout could not be expired.",
         });
-        return;
+      
       }
 
       res.status(200).json({
