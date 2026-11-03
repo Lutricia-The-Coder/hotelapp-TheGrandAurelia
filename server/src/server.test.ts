@@ -26,7 +26,6 @@ const {
     bookingAggregateMock,
     paymentCreateMock,
 transactionMock,
-stripeCheckoutCreateMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -51,7 +50,6 @@ stripeCheckoutCreateMock,
   bookingAggregateMock: vi.fn(),
   paymentCreateMock: vi.fn(),
 transactionMock: vi.fn(),
-stripeCheckoutCreateMock: vi.fn(),
 }));
 const TEST_JWT_SECRET = "test-only-secret-for-booking-tests";
 
@@ -127,16 +125,7 @@ payment: {
   },
 }));
 
-vi.mock("./lib/stripe.js", () => ({
-  getStripeClient: () => ({
-    checkout: {
-      sessions: {
-        create: stripeCheckoutCreateMock,
-      },
-    },
-  }),
-  getFrontendUrl: () => "http://localhost:5173",
-}));
+
 import app from "./app.js";
 
 describe("Health API", () => {
@@ -667,14 +656,24 @@ paymentCreateMock.mockResolvedValue({
   bookingId: "booking-test-2",
   amount: 2400,
   currency: "ZAR",
-  provider: "stripe",
+ provider: "paystack",
   status: "PENDING",
 });
 
-stripeCheckoutCreateMock.mockResolvedValue({
-  id: "cs_test_session_1",
-  url: "https://checkout.stripe.com/c/pay/cs_test_session_1",
-});
+vi.stubGlobal(
+  "fetch",
+  vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      status: true,
+      message: "Authorization URL created",
+      data: {
+        authorization_url: "https://checkout.paystack.com/test-reference",
+        reference: "GA-payment-test-1",
+      },
+    }),
+  }),
+);
 roomFindUniqueMock.mockResolvedValue({
   id: "room-test-1",
   pricePerNight: 1200,
@@ -717,12 +716,11 @@ expect(paymentCreateMock).toHaveBeenCalledOnce();
 expect(transactionMock).toHaveBeenCalledOnce();
 
 expect(response.body.checkoutUrl).toBe(
-  "https://checkout.stripe.com/c/pay/cs_test_session_1",
+  "https://checkout.paystack.com/test-reference",
 );
 
 expect(response.body.paymentId).toBe("payment-test-1");
 
-expect(stripeCheckoutCreateMock).toHaveBeenCalledOnce();
   });
 
 // Additional test cases for booking creation and cancellation  

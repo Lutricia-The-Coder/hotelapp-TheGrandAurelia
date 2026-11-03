@@ -6,10 +6,7 @@ import {
   requireAdmin,
   type AuthenticatedRequest,
 } from "../middleware/auth.js";import { sendEmail } from "../lib/mailer.js";  
-import {
-  getStripeClient,
-  getFrontendUrl,
-} from "../lib/stripe.js";
+
 const router = Router();
 
 // GET /api/v1/bookings/user/:userId
@@ -764,7 +761,7 @@ const { booking, payment } = await prisma.$transaction(async (tx) => {
     data: {
       amount: totalPrice,
       currency: "ZAR",
-      provider: "stripe",
+provider: "paystack",
       bookingId: booking.id,
     },
   });
@@ -773,58 +770,66 @@ const { booking, payment } = await prisma.$transaction(async (tx) => {
 });
 
 try {
-  const stripe = getStripeClient();
-  const frontendUrl = getFrontendUrl();
+  const secretKey = process.env.PAYSTACK_SECRET_KEY?.trim();
+  const frontendUrl = process.env.FRONTEND_URL?.trim();
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-allowed_payment_method_types: ["card"],
-    customer_email: user.email,
-    client_reference_id: booking.id,
+  if (!secretKey) {
+    throw new Error("PAYSTACK_SECRET_KEY is missing.");
+  }
 
-    line_items: [
-      {
-        price_data: {
-          currency: "zar",
-          unit_amount: amountInCents,
-          product_data: {
-            name: `The Grand Aurelia - ${room.name}`,
-            description: `${nights} night(s), ${quantity} room(s)`,
-          },
+  if (!frontendUrl) {
+    throw new Error("FRONTEND_URL is missing.");
+  }
+
+  const reference = `GA-${payment.id}`;
+
+  const paystackResponse = await fetch(
+    "https://api.paystack.co/transaction/initialize",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: user.email,
+        amount: amountInCents,
+        currency: "ZAR",
+        reference,
+        callback_url: `${frontendUrl.replace(/\/+$/, "")}/?payment=success`,
+        metadata: {
+          bookingId: booking.id,
+          paymentId: payment.id,
+          userId: user.id,
         },
-        quantity: 1,
-      },
-    ],
-
-    metadata: {
-      bookingId: booking.id,
-      paymentId: payment.id,
-      userId: user.id,
+      }),
     },
+  );
 
-    payment_intent_data: {
-      metadata: {
-        bookingId: booking.id,
-        paymentId: payment.id,
-        userId: user.id,
-      },
-    },
+  const paystackResult = await paystackResponse.json() as {
+    status: boolean;
+    message?: string;
+    data?: {
+      authorization_url?: string;
+      reference?: string;
+    };
+  };
 
-    success_url:
-      `${frontendUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-
-    cancel_url:
-      `${frontendUrl}/?payment=cancelled&booking_id=${booking.id}`,
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a checkout URL.");
+  if (
+    !paystackResponse.ok ||
+    !paystackResult.status ||
+    !paystackResult.data?.authorization_url ||
+    !paystackResult.data.reference
+  ) {
+    throw new Error(
+      paystackResult.message || "Unable to initialize Paystack payment.",
+    );
   }
 
   await prisma.payment.update({
     where: { id: payment.id },
     data: {
-      providerPaymentId: session.id,
+      providerPaymentId: paystackResult.data.reference,
     },
   });
 
@@ -832,12 +837,10 @@ allowed_payment_method_types: ["card"],
     success: true,
     message: "Booking created. Continue to secure payment.",
     data: booking,
-    checkoutUrl: session.url,
+    checkoutUrl: paystackResult.data.authorization_url,
     paymentId: payment.id,
   });
-} catch (stripeError) {
-  // Do not leave an unpaid booking occupying room inventory
-  // when Checkout Session creation fails.
+} catch (paystackError) {
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: payment.id },
@@ -850,7 +853,7 @@ allowed_payment_method_types: ["card"],
     });
   });
 
-  throw stripeError;
+  throw paystackError;
 }
 
   } catch (error) {
