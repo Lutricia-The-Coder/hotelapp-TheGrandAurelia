@@ -828,7 +828,7 @@ dispatch(clearUser());
   
 if (!result.success || !result.data || !result.checkoutUrl) {
   throw new Error(
-    result.message || "Unable to start Stripe checkout.",
+    result.message || "Unable to start Payment checkout.",
   );
 }
 
@@ -988,19 +988,23 @@ useEffect(() => {
 
   const allBranches = Object.values(branches).flat();
   
+
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const paymentResult = params.get("payment");
+  const reference =
+    params.get("reference") || params.get("trxref");
 
   if (!paymentResult) return;
 
-  const sessionId = params.get("session_id");
   let active = true;
 
   function clearPaymentParams() {
     const url = new URL(window.location.href);
 
     url.searchParams.delete("payment");
+    url.searchParams.delete("reference");
+    url.searchParams.delete("trxref");
     url.searchParams.delete("session_id");
     url.searchParams.delete("booking_id");
 
@@ -1014,86 +1018,84 @@ useEffect(() => {
   async function handlePaymentReturn() {
     const token = sessionStorage.getItem("hotelAuthToken");
 
-  
-if (paymentResult === "cancelled") {
-  const bookingId = params.get("booking_id");
+    if (paymentResult === "cancelled") {
+      const bookingId = params.get("booking_id");
 
-  setBookingMessage("");
-  setBookingError("");
+      setBookingMessage("");
+      setBookingError("");
 
-  if (!token || !bookingId) {
-    setBookingError(
-      "Checkout was cancelled. Please sign in to check your reservation status.",
-    );
-    clearPaymentParams();
-    return;
-  }
-
-  try {
-    // Ask the backend to expire the open Stripe Checkout Session.
-    const { sessionId } = await cancelPendingCheckout(
-      bookingId,
-      token,
-    );
-
-    let latestPayment:
-      | Awaited<ReturnType<typeof getPaymentStatus>>
-      | null = null;
-
-    // Wait for Stripe's expiration webhook to update the database.
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (!active) return;
-
-      latestPayment = await getPaymentStatus(sessionId, token);
-
-      if (
-        latestPayment.paymentStatus !== "PENDING" ||
-        latestPayment.booking.status !== "PENDING"
-      ) {
-        break;
-      }
-
-      if (attempt < 9) {
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, 1200),
+      if (!token || !bookingId) {
+        setBookingError(
+          "Checkout was cancelled. Please sign in to check your reservation status.",
         );
+        clearPaymentParams();
+        return;
       }
+
+      try {
+        const { reference: cancelledReference } =
+          await cancelPendingCheckout(bookingId, token);
+
+        let latestPayment:
+          | Awaited<ReturnType<typeof getPaymentStatus>>
+          | null = null;
+
+        for (let attempt = 0; attempt < 10; attempt++) {
+          if (!active) return;
+
+          latestPayment = await getPaymentStatus(
+            cancelledReference,
+            token,
+          );
+
+          if (
+            latestPayment.paymentStatus !== "PENDING" ||
+            latestPayment.booking.status !== "PENDING"
+          ) {
+            break;
+          }
+
+          if (attempt < 9) {
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, 1200),
+            );
+          }
+        }
+
+        if (!active) return;
+
+        await handleLoadMyBookings();
+
+        if (
+          latestPayment?.paymentStatus === "FAILED" &&
+          latestPayment.booking.status === "CANCELLED"
+        ) {
+          setBookingMessage(
+            "Checkout cancelled. Your unpaid reservation has been released.",
+          );
+        } else {
+          setBookingMessage(
+            "Checkout was cancelled. Your reservation is being updated. Please check My Bookings shortly.",
+          );
+        }
+      } catch (error) {
+        if (!active) return;
+
+        setBookingError(
+          error instanceof Error
+            ? error.message
+            : "Unable to cancel your pending checkout.",
+        );
+      } finally {
+        if (active) {
+          clearPaymentParams();
+        }
+      }
+
+      return;
     }
 
-    if (!active) return;
-
-    await handleLoadMyBookings();
-
-    if (
-      latestPayment?.paymentStatus === "FAILED" &&
-      latestPayment.booking.status === "CANCELLED"
-    ) {
-      setBookingMessage(
-        "Checkout cancelled. Your unpaid reservation has been released.",
-      );
-    } else {
-      setBookingMessage(
-        "Checkout was cancelled. Your reservation is being updated. Please check My Bookings shortly.",
-      );
-    }
-  } catch (error) {
-    if (!active) return;
-
-    setBookingError(
-      error instanceof Error
-        ? error.message
-        : "Unable to cancel your pending checkout.",
-    );
-  } finally {
-    if (active) {
-      clearPaymentParams();
-    }
-  }
-
-  return;
-}
-
-    if (paymentResult !== "success" || !sessionId) {
+    if (paymentResult !== "success" || !reference) {
       setBookingError("Invalid payment return information.");
       clearPaymentParams();
       return;
@@ -1110,18 +1112,17 @@ if (paymentResult === "cancelled") {
 
     setBookingLoading(true);
     setBookingError("");
-    setBookingMessage("Verifying your payment with Stripe...");
+    setBookingMessage("Verifying your payment with Paystack...");
 
     try {
       let latestPayment: Awaited<
         ReturnType<typeof getPaymentStatus>
       > | null = null;
 
-      // Allow time for Stripe's webhook to update the database.
       for (let attempt = 0; attempt < 10; attempt++) {
         if (!active) return;
 
-        latestPayment = await getPaymentStatus(sessionId, token);
+        latestPayment = await getPaymentStatus(reference, token);
 
         if (
           latestPayment.paymentStatus !== "PENDING" ||
@@ -1207,6 +1208,7 @@ if (paymentResult === "cancelled") {
     active = false;
   };
 }, []);
+
 
   const allRooms = Object.values(rooms).flat();
   const lowestPrice = allRooms.length

@@ -153,11 +153,11 @@ export type PaymentStatusResult = {
 };
 
 export async function getPaymentStatus(
-  sessionId: string,
+  reference: string,
   token: string,
 ): Promise<PaymentStatusResult> {
   const response = await fetch(
-    `${API_BASE_URL}/payments/session/${encodeURIComponent(sessionId)}`,
+    `${API_BASE_URL}/payments/reference/${encodeURIComponent(reference)}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -183,7 +183,7 @@ export async function getPaymentStatus(
 export async function cancelPendingCheckout(
   bookingId: string,
   token: string,
-): Promise<{ sessionId: string }> {
+): Promise<{ reference: string }> {
   const response = await fetch(
     `${API_BASE_URL}/payments/bookings/${encodeURIComponent(bookingId)}/cancel-checkout`,
     {
@@ -196,7 +196,7 @@ export async function cancelPendingCheckout(
 
   const result: {
     success: boolean;
-    data?: { sessionId: string };
+    data?: { reference: string };
     message?: string;
   } = await response.json();
 

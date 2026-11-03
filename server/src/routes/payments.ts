@@ -488,7 +488,7 @@ router.get(
         return;
       }
 
-      const payment = await prisma.payment.findFirst({
+      let payment = await prisma.payment.findFirst({
         where: {
           provider: "paystack",
           providerPaymentId: reference,
@@ -523,7 +523,45 @@ router.get(
         });
         return;
       }
+if (payment.status === "PENDING") {
+  await processSuccessfulPayment(reference);
 
+  payment = await prisma.payment.findFirst({
+    where: {
+      provider: "paystack",
+      providerPaymentId: reference,
+      booking: {
+        is: {
+          userId: req.user!.id,
+        },
+      },
+    },
+    select: {
+      status: true,
+      amount: true,
+      currency: true,
+      booking: {
+        select: {
+          id: true,
+          checkIn: true,
+          checkOut: true,
+          totalPrice: true,
+          roomTypeId: true,
+          userId: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (!payment) {
+    res.status(404).json({
+      success: false,
+      message: "Payment not found after verification.",
+    });
+    return;
+  }
+}
       res.status(200).json({
         success: true,
         data: {

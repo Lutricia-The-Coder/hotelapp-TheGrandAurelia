@@ -30,6 +30,9 @@ model HotelBranch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+images     String[] @default([])
+coverImage String?
+
   hotelId            String          @db.Uuid
   hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes          RoomType[]
