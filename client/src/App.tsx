@@ -1434,6 +1434,9 @@ const prices = hotelBranches
       </button>
       
     )}
+    {authUser.role === "ADMIN" && (
+  // Keep your existing Manage Accommodation button here, unchanged.
+
 <button
   type="button"
   className="login-link sign-out-button"
@@ -1456,7 +1459,7 @@ const prices = hotelBranches
   {showAdminAccommodation
     ? "Hide Accommodation Management"
     : "Manage Accommodation"}
-</button>
+</button>)}
 {authUser.role === "ADMIN" && (
   <button
     type="button"
@@ -1684,52 +1687,67 @@ const prices = hotelBranches
     </div>
   </section>
 )}
+<section className="hero" id="home">
+  <div
+    className="hero-image"
+    role="img"
+    aria-label="Peaceful luxury lodge surrounded by nature"
+  />
+  <div className="hero-shade" />
 
-        <section className="hero" id="home">
-          <div className="hero-image" role="img" aria-label="Peaceful luxury lodge surrounded by nature" />
-          <div className="hero-shade" />
+  <div className="hero-content">
+    <p className="eyebrow hero-eyebrow">
+      <span /> THE GRAND AURELIA · SOUTH AFRICA
+    </p>
 
-          <div className="hero-content">
-            <p className="eyebrow hero-eyebrow">
-              <span /> YOUR SANCTUARY IN MPUMALANGA
-            </p>
-            <h1>Where every stay<br />becomes a <em>story.</em></h1>
-            <p className="hero-description">
-              Discover thoughtful comfort, warm hospitality, and a place
-              to slow down and feel at home.
-            </p>
-            <a className="gold-button" href="#destinations">
-              Discover your stay <span>→</span>
-            </a>
-          </div>
+    <h1>
+      Discover a place<br />
+      to <em>belong.</em>
+    </h1>
 
-          <div className="hero-caption">
-            <span className="caption-line" />
-            <span>MPUMALANGA, SOUTH AFRICA</span>
-          </div>
+    <p className="hero-description">
+      Thoughtfully designed stays, genuine hospitality,
+      and beautiful places to make your own.
+    </p>
 
-          <div className="hero-index"><strong>01</strong> / 03</div>
-        </section>
+    <a className="gold-button" href="#destinations">
+      Explore our destinations <span>→</span>
+    </a>
+  </div>
 
-        <section className="search-section" aria-label="Find a stay">
-          <div className="search-intro">
-            <span className="search-icon">⌕</span>
-            <div>
-              <strong>Find your escape</strong>
-              <span>Begin with a destination</span>
-            </div>
-          </div>
-          <a className="search-field" href="#destinations">
-            <span className="field-label">DESTINATION</span>
-            <strong>Mbombela, South Africa</strong>
-          </a>
-          <a className="search-field" href="#rooms">
-            <span className="field-label">YOUR STAY</span>
-            <strong>Explore available rooms</strong>
-          </a>
-          <a className="search-button" href="#rooms">Explore stays <span>→</span></a>
-        </section>
+  <div className="hero-caption">
+    <span className="caption-line" />
+    <span>THE GRAND AURELIA · SOUTH AFRICA</span>
+  </div>
 
+  <div className="hero-index">
+    <strong>01</strong> / THE ART OF STAYING
+  </div>
+</section>
+
+<section className="search-section" aria-label="Explore accommodation">
+  <div className="search-intro">
+    <span className="search-icon">⌕</span>
+    <div>
+      <strong>Find your stay</strong>
+      <span>Your next escape begins here</span>
+    </div>
+  </div>
+
+  <a className="search-field" href="#destinations">
+    <span className="field-label">OUR DESTINATIONS</span>
+    <strong>Explore our locations</strong>
+  </a>
+
+  <a className="search-field" href="#rooms">
+    <span className="field-label">ACCOMMODATION</span>
+    <strong>Discover available rooms</strong>
+  </a>
+
+  <a className="search-button" href="#destinations">
+    Discover stays <span>→</span>
+  </a>
+</section>
         <section className="welcome-section" id="about">
           <div className="welcome-copy">
             <p className="eyebrow"><span /> WELCOME TO THE GRAND AURELIA</p>
@@ -2401,7 +2419,7 @@ const prices = hotelBranches
     setBookingQuantity(1);
     setBookingMessage("");
     setBookingError("");
-    document.getElementById("booking")?.scrollIntoView({
+    document.getElementById("booking-form")?.scrollIntoView({
       behavior: "smooth",
     });
   }}
