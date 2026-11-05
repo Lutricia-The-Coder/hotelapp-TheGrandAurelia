@@ -4,6 +4,10 @@ import prisma from "../lib/prisma.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  requireAuth,
+  type AuthenticatedRequest,
+} from "../middleware/auth.js";
 
 const router = Router();
 
@@ -39,6 +43,99 @@ function getGoogleStateCookie(cookieHeader: string | undefined) {
   return entry?.slice(GOOGLE_STATE_COOKIE.length + 1);
 }
 
+
+router.post(
+  "/admin-setup",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const setupKey = process.env.ADMIN_SETUP_KEY;
+      const suppliedKey = req.body?.setupKey;
+
+      if (!setupKey || setupKey.length < 32) {
+        res.status(503).json({
+          success: false,
+          message: "Administrator setup is not configured or is disabled.",
+        });
+        return;
+      }
+
+      if (typeof suppliedKey !== "string") {
+        res.status(400).json({
+          success: false,
+          message: "A valid setup key is required.",
+        });
+        return;
+      }
+
+      const expected = Buffer.from(setupKey, "utf8");
+      const supplied = Buffer.from(suppliedKey, "utf8");
+
+      if (
+        expected.length !== supplied.length ||
+        !timingSafeEqual(expected, supplied)
+      ) {
+        res.status(403).json({
+          success: false,
+          message: "Invalid administrator setup key.",
+        });
+        return;
+      }
+
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: "Authentication required.",
+        });
+        return;
+      }
+
+      const promoted = await prisma.$transaction(
+        async (tx) => {
+          const adminCount = await tx.user.count({
+            where: { role: "ADMIN" },
+          });
+
+          if (adminCount > 0) {
+            return false;
+          }
+
+          await tx.user.update({
+            where: { id: userId },
+            data: { role: "ADMIN" },
+          });
+
+          return true;
+        },
+        {
+          isolationLevel: "Serializable",
+        },
+      );
+
+      if (!promoted) {
+        res.status(409).json({
+          success: false,
+          message: "Administrator setup has already been completed.",
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Your account is now an administrator. Please sign in again.",
+      });
+    } catch (error) {
+      console.error("Administrator setup failed:", error);
+
+      res.status(409).json({
+        success: false,
+        message: "Administrator setup could not be completed. It may already have been used.",
+      });
+    }
+  },
+);
 
 router.post("/register", async (req, res) => {
   try {

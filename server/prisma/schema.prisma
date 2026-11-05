@@ -30,8 +30,8 @@ model HotelBranch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-images     String[] @default([])
-coverImage String?
+  images     String[] @default([])
+  coverImage String?
 
   hotelId            String          @db.Uuid
   hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
@@ -45,19 +45,32 @@ coverImage String?
 }
 
 model RoomType {
-  id            String      @id @default(uuid()) @db.Uuid
-  name          String
-  description   String?
-  capacity      Int
-  pricePerNight Decimal     @db.Decimal(10, 2)
-  totalRooms    Int         @default(1)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  bookings      Booking[]
-  branchId      String      @db.Uuid
-  branch        HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id               String            @id @default(uuid()) @db.Uuid
+  name             String
+  description      String?
+  capacity         Int
+  pricePerNight    Decimal           @db.Decimal(10, 2)
+  totalRooms       Int               @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  bookings         Booking[]
+  branchId         String            @db.Uuid
+  branch           HotelBranch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  roomTypeOptionId String?           @db.Uuid
+  roomTypeOption   RoomTypeOption?   @relation(fields: [roomTypeOptionId], references: [id], onDelete: Restrict)
+  amenities        RoomTypeAmenity[]
 
   @@index([branchId])
+}
+
+model RoomTypeOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomTypes RoomType[]
 }
 
 model Booking {
@@ -124,7 +137,8 @@ model Amenity {
   name      String   @unique
   createdAt DateTime @default(now())
 
-  branches BranchAmenity[]
+  branches  BranchAmenity[]
+  roomTypes RoomTypeAmenity[]
 }
 
 model BranchAmenity {
@@ -136,6 +150,18 @@ model BranchAmenity {
   amenity Amenity     @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([branchId, amenityId])
+  @@index([amenityId])
+}
+
+model RoomTypeAmenity {
+  roomTypeId String   @db.Uuid
+  amenityId  String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([roomTypeId, amenityId])
   @@index([amenityId])
 }
 
@@ -167,6 +193,7 @@ model Favorite {
   @@id([userId, hotelId])
   @@index([hotelId])
 }
+
 model Payment {
   id                      String        @id @default(uuid()) @db.Uuid
   amount                  Decimal       @db.Decimal(10, 2)
@@ -185,6 +212,7 @@ model Payment {
 
   @@index([bookingId, status])
 }
+
 enum PaymentStatus {
   PENDING
   SUCCEEDED

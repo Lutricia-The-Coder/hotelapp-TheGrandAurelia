@@ -1,6 +1,8 @@
-                             
+
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import prisma from "../lib/prisma.js";
+
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -9,11 +11,11 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export function requireAuth(
+export async function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-) {
+): Promise<void> {
   const authorization = req.headers.authorization;
 
   if (!authorization?.startsWith("Bearer ")) {
@@ -36,13 +38,14 @@ export function requireAuth(
     return;
   }
 
+  let userId: string;
+
   try {
     const payload = jwt.verify(token, secret);
 
     if (
       typeof payload === "string" ||
-      typeof payload.sub !== "string" ||
-      typeof payload.role !== "string"
+      typeof payload.sub !== "string"
     ) {
       res.status(401).json({
         success: false,
@@ -51,16 +54,43 @@ export function requireAuth(
       return;
     }
 
-    req.user = {
-      id: payload.sub,
-      role: payload.role,
-    };
-
-    next();
+    userId = payload.sub;
   } catch {
     res.status(401).json({
       success: false,
       message: "Invalid or expired authentication token",
+    });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+      },
+    });
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "User account not found",
+      });
+      return;
+    }
+
+    req.user = {
+      id: user.id,
+      role: user.role,
+    };
+
+    next();
+  } catch (error) {
+    console.error("Authentication database lookup failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Authentication is temporarily unavailable",
     });
   }
 }

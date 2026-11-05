@@ -7,6 +7,7 @@ import {
 } from "react";
 import { API_BASE_URL } from "./api";
 
+
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 function getBranchPhotoUrl(photoPath: string): string {
   if (/^https?:\/\//i.test(photoPath)) return photoPath;
@@ -20,8 +21,34 @@ type RoomRecord = {
   capacity: number;
   pricePerNight: number | string;
   totalRooms: number;
+  roomTypeOptionId: string;
+  roomTypeOption?: {
+    id: string;
+    name: string;
+    isActive: boolean;
+  } | null;
+  amenities?: {
+    amenityId: string;
+    amenity: {
+      id: string;
+      name: string;
+    };
+  }[];
+};
+type RoomTypeOptionRecord = {
+  id: string;
+  name: string;
+  isActive: boolean;
 };
 
+type AmenityRecord = {
+  id: string;
+  name: string;
+  _count?: {
+    branches: number;
+    roomTypes: number;
+  };
+};
 type PendingBranchPhoto = { file: File; previewUrl: string; };
 
 type BranchRecord = {
@@ -48,12 +75,6 @@ type HotelRecord = {
   branches: BranchRecord[];
 };
 
-type HotelForm = {
-  id: string | null;
-  name: string;
-  description: string;
-};
-
 type BranchForm = {
   id: string | null;
   hotelId: string;
@@ -70,16 +91,14 @@ type BranchForm = {
 type RoomForm = {
   id: string | null;
   branchId: string;
-  name: string;
+  roomTypeOptionId: string;
   description: string;
   capacity: string;
   pricePerNight: string;
   totalRooms: string;
+  amenityIds: string[];
 };
 
-function newHotelForm(): HotelForm {
-  return { id: null, name: "", description: "" };
-}
 
 function newBranchForm(hotelId = ""): BranchForm {
   return {
@@ -100,11 +119,12 @@ function newRoomForm(branchId = ""): RoomForm {
   return {
     id: null,
     branchId,
-    name: "",
+    roomTypeOptionId: "",
     description: "",
     capacity: "2",
     pricePerNight: "",
     totalRooms: "1",
+    amenityIds: [],
   };
 }
 
@@ -151,16 +171,23 @@ async function adminRequest<T>(
 }
 export default function AdminAccommodation() {
   const [hotels, setHotels] = useState<HotelRecord[]>([]);
+  const [roomTypeOptions, setRoomTypeOptions] = useState<RoomTypeOptionRecord[]>([]);
+const [amenities, setAmenities] = useState<AmenityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const [hotelForm, setHotelForm] = useState<HotelForm>(newHotelForm());
+
   const [branchForm, setBranchForm] = useState<BranchForm>(
     newBranchForm(),
   );
   const [roomForm, setRoomForm] = useState<RoomForm>(newRoomForm());
+  const [roomTypeOptionName, setRoomTypeOptionName] = useState("");
+const [editingRoomTypeOptionId, setEditingRoomTypeOptionId] = useState<string | null>(null);
+
+const [amenityName, setAmenityName] = useState("");
+const [editingAmenityId, setEditingAmenityId] = useState<string | null>(null);
   const [existingBranchImages, setExistingBranchImages] = useState<string[]>([]);
   const [pendingBranchPhotos, setPendingBranchPhotos] = useState<PendingBranchPhoto[]>([]);
   const [coverImageSelection, setCoverImageSelection] = useState("");
@@ -253,7 +280,14 @@ function handleBranchPhotoSelection(event: ChangeEvent<HTMLInputElement>) {
     setError("");
 
     try {
-      const hotelRows = await adminRequest<HotelRecord[]>("/hotels");
+     const [hotelRows, optionRows, amenityRows] = await Promise.all([
+  adminRequest<HotelRecord[]>("/hotels"),
+  adminRequest<RoomTypeOptionRecord[]>("/room-type-options/admin"),
+  adminRequest<AmenityRecord[]>("/amenities/admin"),
+]);
+
+setRoomTypeOptions(optionRows);
+setAmenities(amenityRows);
 
       const completeHotels = await Promise.all(
         hotelRows.map(async (hotel) => {
@@ -287,76 +321,7 @@ setHotels(completeHotels);
     setError("");
     setMessage("");
   }
-
-  async function saveHotel(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    clearFeedback();
-
-    if (!hotelForm.name.trim()) {
-      setError("Enter a hotel name.");
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const payload = {
-        name: hotelForm.name.trim(),
-        description: hotelForm.description.trim() || null,
-      };
-
-      if (hotelForm.id) {
-        await adminRequest(
-          `/hotels/${encodeURIComponent(hotelForm.id)}`,
-          "PUT",
-          payload,
-        );
-        setMessage("Hotel updated successfully.");
-      } else {
-        await adminRequest("/hotels", "POST", payload);
-        setMessage("Hotel created successfully.");
-      }
-
-      setHotelForm(newHotelForm());
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save hotel.");
-    } finally {
-      setSaving(false);
-    }
-  }
-async function deleteHotel(hotel: HotelRecord) {
-    clearFeedback();
-
-    const confirmed = window.confirm(
-      `Delete "${hotel.name}" and its branches and room types? Existing reservations may prevent deletion.`,
-    );
-
-    if (!confirmed) return;
-
-    setSaving(true);
-
-    try {
-      await adminRequest(
-        `/hotels/${encodeURIComponent(hotel.id)}`,
-        "DELETE",
-      );
-
-      if (hotelForm.id === hotel.id) {
-        setHotelForm(newHotelForm());
-      }
-
-      setMessage("Hotel deleted successfully.");
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to delete hotel.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
+     
   async function saveBranch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearFeedback();
@@ -447,63 +412,65 @@ async function deleteHotel(hotel: HotelRecord) {
     }
   }
 
-  async function saveRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    clearFeedback();
+ async function saveRoom(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+  clearFeedback();
 
-    const capacity = Number(roomForm.capacity);
-    const pricePerNight = Number(roomForm.pricePerNight);
-    const totalRooms = Number(roomForm.totalRooms);
-    if (
-      !roomForm.name.trim() ||
-      !roomForm.branchId ||
-      !Number.isInteger(capacity) ||
-      capacity < 1 ||
-      !Number.isFinite(pricePerNight) ||
-      pricePerNight < 0 ||
-      !Number.isInteger(totalRooms) ||
-      totalRooms < 1
-    ) {
-      setError(
-        "Enter a room name, positive capacity, valid nightly price and positive room count.",
-      );
-      return;
-    }
+  const capacity = Number(roomForm.capacity);
+  const pricePerNight = Number(roomForm.pricePerNight);
+  const totalRooms = Number(roomForm.totalRooms);
 
-    setSaving(true);
-
-    try {
-      const payload = {
-        name: roomForm.name.trim(),
-        description: roomForm.description.trim() || null,
-        capacity,
-        pricePerNight,
-        totalRooms,
-        ...(!roomForm.id ? { branchId: roomForm.branchId } : {}),
-      };
-
-      if (roomForm.id) {
-        await adminRequest(
-          `/rooms/${encodeURIComponent(roomForm.id)}`,
-          "PUT",
-          payload,
-        );
-        setMessage("Room type updated successfully.");
-      } else {
-        await adminRequest("/rooms", "POST", payload);
-        setMessage("Room type created successfully.");
-      }
-
-      setRoomForm(newRoomForm());
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save room type.",
-      );
-    } finally {
-      setSaving(false);
-    }
+  if (
+    !roomForm.roomTypeOptionId ||
+    !roomForm.branchId ||
+    !Number.isInteger(capacity) ||
+    capacity < 1 ||
+    !Number.isFinite(pricePerNight) ||
+    pricePerNight < 0 ||
+    !Number.isInteger(totalRooms) ||
+    totalRooms < 1
+  ) {
+    setError(
+      "Select a room type and enter a positive capacity, valid nightly price and positive room count.",
+    );
+    return;
   }
+
+  setSaving(true);
+
+  try {
+    const payload = {
+      roomTypeOptionId: roomForm.roomTypeOptionId,
+      amenityIds: roomForm.amenityIds,
+      description: roomForm.description.trim() || null,
+      capacity,
+      pricePerNight,
+      totalRooms,
+      ...(!roomForm.id ? { branchId: roomForm.branchId } : {}),
+    };
+
+    if (roomForm.id) {
+      await adminRequest(
+        `/rooms/${encodeURIComponent(roomForm.id)}`,
+        "PUT",
+        payload,
+      );
+      setMessage("Room type updated successfully.");
+    } else {
+      await adminRequest("/rooms", "POST", payload);
+      setMessage("Room type created successfully.");
+    }
+
+    setRoomForm(newRoomForm());
+    await loadData();
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Failed to save room type.",
+    );
+  } finally {
+    setSaving(false);
+  }
+}
   async function deleteRoom(room: RoomRecord) {
     clearFeedback();
 
@@ -537,7 +504,124 @@ async function deleteHotel(hotel: HotelRecord) {
       setSaving(false);
     }
   }
+  async function saveRoomTypeOption(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearFeedback();
 
+    const name = roomTypeOptionName.trim();
+    if (!name) {
+      setError("Enter a room type name.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editingRoomTypeOptionId) {
+        await adminRequest(
+          `/room-type-options/${encodeURIComponent(editingRoomTypeOptionId)}`,
+          "PUT",
+          { name },
+        );
+        setMessage("Room type option renamed successfully.");
+      } else {
+        await adminRequest("/room-type-options", "POST", { name });
+        setMessage("Room type option added successfully.");
+      }
+
+      setRoomTypeOptionName("");
+      setEditingRoomTypeOptionId(null);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save room type option.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleRoomTypeOption(option: RoomTypeOptionRecord) {
+    clearFeedback();
+    setSaving(true);
+
+    try {
+      await adminRequest(
+        `/room-type-options/${encodeURIComponent(option.id)}/active`,
+        "PATCH",
+        { isActive: !option.isActive },
+      );
+      setMessage(
+        option.isActive
+          ? "Room type option deactivated."
+          : "Room type option activated.",
+      );
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update room type option.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAmenity(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearFeedback();
+
+    const name = amenityName.trim();
+    if (!name) {
+      setError("Enter an amenity name.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editingAmenityId) {
+        await adminRequest(
+          `/amenities/${encodeURIComponent(editingAmenityId)}`,
+          "PUT",
+          { name },
+        );
+        setMessage("Amenity renamed successfully.");
+      } else {
+        await adminRequest("/amenities", "POST", { name });
+        setMessage("Amenity added successfully.");
+      }
+
+      setAmenityName("");
+      setEditingAmenityId(null);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save amenity.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAmenity(amenity: AmenityRecord) {
+    clearFeedback();
+
+    const branchCount = amenity._count?.branches ?? 0;
+    const roomCount = amenity._count?.roomTypes ?? 0;
+
+    if (branchCount > 0 || roomCount > 0) {
+      setError("This amenity is assigned to a branch or room type and cannot be deleted.");
+      return;
+    }
+
+    if (!window.confirm(`Delete the "${amenity.name}" amenity?`)) return;
+
+    setSaving(true);
+    try {
+      await adminRequest(
+        `/amenities/${encodeURIComponent(amenity.id)}`,
+        "DELETE",
+      );
+      setMessage("Amenity deleted successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete amenity.");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <section id="admin-accommodation" className="admin-accommodation">
       <div className="admin-accommodation-heading">
@@ -545,8 +629,8 @@ async function deleteHotel(hotel: HotelRecord) {
           <p className="admin-eyebrow">PROPERTY MANAGEMENT</p>
           <h2>Accommodation Management</h2>
           <p>
-            Manage hotels, branches, room types, guest capacity and nightly
-            pricing.
+           Manage The Grand Aurelia branches, room types, guest capacity and nightly
+pricing.
           </p>
         </div>
 
@@ -571,60 +655,202 @@ async function deleteHotel(hotel: HotelRecord) {
           {message}
         </p>
       )}
-        <form className="admin-form-card" onSubmit={saveHotel}>
-        <h3>{hotelForm.id ? "Edit hotel" : "Add a hotel"}</h3>
+            <div className="admin-form-card">
+        <h3>Room type options</h3>
+        <p>Manage the room types available when creating or editing rooms.</p>
 
-        <div className="admin-form-grid">
-          <label>
-            Hotel name *
-            <input
-              value={hotelForm.name}
-              onChange={(event) =>
-                setHotelForm({
-                  ...hotelForm,
-                  name: event.target.value,
-                })
-              }
-              required
-              maxLength={150}
-            />
-          </label>
+        <form onSubmit={saveRoomTypeOption}>
+          <div className="admin-form-grid">
+            <label>
+              Room type name *
+              <input
+                value={roomTypeOptionName}
+                onChange={(event) => setRoomTypeOptionName(event.target.value)}
+                placeholder="e.g. Deluxe Suite"
+                required
+              />
+            </label>
+                                 </div>
 
-          <label>
-            Description
-            <textarea
-              value={hotelForm.description}
-              onChange={(event) =>
-                setHotelForm({
-                  ...hotelForm,
-                  description: event.target.value,
-                })
-              }
-              rows={3}
-            />
-          </label>
-        </div>
-  <div className="admin-form-actions">
-          <button type="submit" disabled={saving}>
-            {saving
-              ? "Saving..."
-              : hotelForm.id
-                ? "Save hotel changes"
-                : "Create hotel"}
-          </button>
+                        <div style={{ marginTop: 16 }}>
+                          <h5>Room amenities</h5>
+                          <p>Select the facilities available in this room type.</p>
 
-          {hotelForm.id && (
-            <button
-              type="button"
-              className="admin-secondary-button"
-              onClick={() => setHotelForm(newHotelForm())}
-              disabled={saving}
-            >
-              Stop editing
+                          {amenities.length === 0 ? (
+                            <p>No amenities have been added to the catalogue yet.</p>
+                          ) : (
+                            <div className="admin-form-grid">
+                              {amenities.map((amenity) => (
+                                <label
+                                  key={amenity.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={roomForm.amenityIds.includes(amenity.id)}
+                                    onChange={(event) =>
+                                      setRoomForm((current) => ({
+                                        ...current,
+                                        amenityIds: event.target.checked
+                                          ? [...current.amenityIds, amenity.id]
+                                          : current.amenityIds.filter(
+                                              (id) => id !== amenity.id,
+                                            ),
+                                      }))
+                                    }
+                                  />
+                                  {amenity.name}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="admin-form-actions">
+            <button type="submit" disabled={saving}>
+              {editingRoomTypeOptionId ? "Save name" : "Add room type option"}
             </button>
+            {editingRoomTypeOptionId && (
+              <button
+                type="button"
+                className="admin-secondary-button"
+                onClick={() => {
+                  setRoomTypeOptionName("");
+                  setEditingRoomTypeOptionId(null);
+                }}
+                disabled={saving}
+              >
+                Cancel editing
+              </button>
+            )}
+          </div>
+        </form>
+
+        <div className="admin-room-list">
+          {roomTypeOptions.length === 0 ? (
+            <p>No room type options have been added.</p>
+          ) : (
+            roomTypeOptions.map((option) => (
+              <div className="admin-room-row" key={option.id}>
+                <div>
+                  <strong>{option.name}</strong>
+                  <p>{option.isActive ? "Active" : "Inactive"}</p>
+                </div>
+                <div className="admin-inline-actions">
+                  <button
+                    type="button"
+                    className="admin-secondary-button"
+                    onClick={() => {
+                      setEditingRoomTypeOptionId(option.id);
+                      setRoomTypeOptionName(option.name);
+                    }}
+                    disabled={saving}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-secondary-button"
+                    onClick={() => void toggleRoomTypeOption(option)}
+                    disabled={saving}
+                  >
+                    {option.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
-      </form>
+      </div>
+
+      <div className="admin-form-card">
+        <h3>Amenity catalogue</h3>
+        <p>
+          Manage facilities that can be assigned to branches and room types.
+          Amenities already in use cannot be deleted.
+        </p>
+
+        <form onSubmit={saveAmenity}>
+          <div className="admin-form-grid">
+            <label>
+              Amenity name *
+              <input
+                value={amenityName}
+                onChange={(event) => setAmenityName(event.target.value)}
+                placeholder="e.g. Wi-Fi"
+                required
+              />
+            </label>
+          </div>
+
+          <div className="admin-form-actions">
+            <button type="submit" disabled={saving}>
+              {editingAmenityId ? "Save name" : "Add amenity"}
+            </button>
+            {editingAmenityId && (
+              <button
+                type="button"
+                className="admin-secondary-button"
+                onClick={() => {
+                  setAmenityName("");
+                  setEditingAmenityId(null);
+                }}
+                disabled={saving}
+              >
+                Cancel editing
+              </button>
+            )}
+          </div>
+        </form>
+
+        <div className="admin-room-list">
+          {amenities.length === 0 ? (
+            <p>No amenities have been added.</p>
+          ) : (
+            amenities.map((amenity) => (
+              <div className="admin-room-row" key={amenity.id}>
+                <div>
+                  <strong>{amenity.name}</strong>
+                  <p>
+                    Used by {amenity._count?.branches ?? 0} branch(es) and{" "}
+                    {amenity._count?.roomTypes ?? 0} room type(s)
+                  </p>
+                </div>
+                <div className="admin-inline-actions">
+                  <button
+                    type="button"
+                    className="admin-secondary-button"
+                    onClick={() => {
+                      setEditingAmenityId(amenity.id);
+                      setAmenityName(amenity.name);
+                    }}
+                    disabled={saving}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-danger-button"
+                    onClick={() => void deleteAmenity(amenity)}
+                    disabled={
+                      saving ||
+                      (amenity._count?.branches ?? 0) > 0 ||
+                      (amenity._count?.roomTypes ?? 0) > 0
+                    }
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
 
       {loading ? (
         <p>Loading accommodation...</p>
@@ -632,39 +858,15 @@ async function deleteHotel(hotel: HotelRecord) {
         <p>No hotels have been created yet.</p>
       ) : (
         <div className="admin-hotel-list">
-          {hotels.map((hotel) => (
+        {hotels.slice(0, 1).map((hotel) => (
             <article className="admin-hotel-card" key={hotel.id}>
               <div className="admin-entity-heading">
                 <div>
-                  <h3>{hotel.name}</h3>
+                 <h3>The Grand Aurelia</h3>
                   <p>{hotel.description || "No description provided."}</p>
                   <small>{hotel.branches.length} branch(es)</small>
                 </div>
 
-                <div className="admin-inline-actions">
-                  <button
-                    type="button"
-                    className="admin-secondary-button"
-                    onClick={() =>
-                      setHotelForm({
-                        id: hotel.id,
-                        name: hotel.name,
-                        description: hotel.description || "",
-                      })
-                    }
-                    disabled={saving}
-                  >
-                    Edit hotel
-                  </button>
-                    <button
-                    type="button"
-                    className="admin-danger-button"
-                    onClick={() => void deleteHotel(hotel)}
-                    disabled={saving}
-                  >
-                    Delete hotel
-                  </button>
-                </div>
               </div>
 
               <div className="admin-branch-list">
@@ -931,19 +1133,33 @@ async function deleteHotel(hotel: HotelRecord) {
                         </h5>
 
                         <div className="admin-form-grid">
-                          <label>
-                            Room type name *
-                            <input
-                              value={roomForm.name}
-                              onChange={(event) =>
-                                setRoomForm({
-                                  ...roomForm,
-                                  name: event.target.value,
-                                })
-                              }
-                              required
-                            />
-                          </label>
+                         <label>
+  Room type *
+  <select
+    value={roomForm.roomTypeOptionId}
+    onChange={(event) =>
+      setRoomForm({
+        ...roomForm,
+        roomTypeOptionId: event.target.value,
+      })
+    }
+    required
+  >
+    <option value="">Select a room type</option>
+    {roomTypeOptions
+      .filter(
+        (option) =>
+          option.isActive ||
+          option.id === roomForm.roomTypeOptionId,
+      )
+      .map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.name}
+          {!option.isActive ? " (Inactive)" : ""}
+        </option>
+      ))}
+  </select>
+</label>
 
                           <label>
                             Description
@@ -1054,14 +1270,17 @@ async function deleteHotel(hotel: HotelRecord) {
                                 className="admin-secondary-button"
                                 onClick={() =>
                                   setRoomForm({
-                                    id: room.id,
-                                    branchId: branch.id,
-                                    name: room.name,
-                                    description: room.description || "",
-                                    capacity: String(room.capacity),
-                                    pricePerNight: String(room.pricePerNight),
-                                    totalRooms: String(room.totalRooms),
-                                  })
+  id: room.id,
+  branchId: branch.id,
+  roomTypeOptionId: room.roomTypeOptionId,
+  description: room.description || "",
+  capacity: String(room.capacity),
+  pricePerNight: String(room.pricePerNight),
+  totalRooms: String(room.totalRooms),
+  amenityIds: room.amenities?.map(
+    (item) => item.amenityId,
+  ) ?? [],
+})
                                 }
                                 disabled={saving}
                               >

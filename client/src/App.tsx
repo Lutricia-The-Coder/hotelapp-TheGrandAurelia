@@ -11,6 +11,7 @@ import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store/store";
 import { setUser, clearUser } from "./store/authSlice";
 import AdminAccommodation from "./AdminAccommodation";
+import AdminUsers from "./AdminUsers";
 import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
 
 
@@ -63,8 +64,14 @@ type RoomType = {
   capacity: number;
   pricePerNight: number;
   totalRooms: number;
+  amenities?: {
+    amenityId: string;
+    amenity: {
+      id: string;
+      name: string;
+    };
+  }[];
 };
-
 type Hotel = {
   id: string;
   name: string;
@@ -93,6 +100,7 @@ const [hotelSearch, setHotelSearch] = useState("");
 const [locationSearch, setLocationSearch] = useState("");
 const [minNightlyPrice, setMinNightlyPrice] = useState("");
 const [maxNightlyPrice, setMaxNightlyPrice] = useState("");
+const [selectedRoomAmenityIds, setSelectedRoomAmenityIds] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -164,6 +172,7 @@ const [adminActionBookingId, setAdminActionBookingId] = useState<string | null>(
 const [showAdminBookings, setShowAdminBookings] = useState(false);
 const [showAdminAccommodation, setShowAdminAccommodation] =
   useState(false);
+  const [showAdminUsers, setShowAdminUsers] = useState(false);
 const [favoriteHotelIds, setFavoriteHotelIds] = useState<string[]>([]);
 const [favoriteHotels, setFavoriteHotels] = useState<FavoriteHotel[]>([]);
 const [favoritesLoading, setFavoritesLoading] = useState(false);
@@ -797,6 +806,9 @@ function handleSignOut() {
   sessionStorage.removeItem("hotelAuthUser");
 
 dispatch(clearUser());
+setShowAdminUsers(false);
+setShowAdminAccommodation(false);
+setShowAdminBookings(false);
   setAuthMode(null);
   setAuthMessage("");
   setAuthError("");
@@ -1238,6 +1250,16 @@ useEffect(() => {
 
 
   const allRooms = Object.values(rooms).flat();
+  const availableRoomAmenities = Array.from(
+  new Map(
+    allRooms.flatMap((room) =>
+      (room.amenities ?? []).map(({ amenity }) => [
+        amenity.id,
+        amenity,
+      ] as const),
+    ),
+  ).values(),
+).sort((a, b) => a.name.localeCompare(b.name));
   const lowestPrice = allRooms.length
     ? Math.min(...allRooms.map((room) => room.pricePerNight))
     : null;
@@ -1435,6 +1457,27 @@ const prices = hotelBranches
     ? "Hide Accommodation Management"
     : "Manage Accommodation"}
 </button>
+{authUser.role === "ADMIN" && (
+  <button
+    type="button"
+    className="login-link sign-out-button"
+    onClick={() => {
+      const nextState = !showAdminUsers;
+      setShowAdminUsers(nextState);
+
+      if (nextState) {
+        window.requestAnimationFrame(() => {
+          document.getElementById("admin-users")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+      }
+    }}
+  >
+    {showAdminUsers ? "Hide User Management" : "Manage Users"}
+  </button>
+)}
     <button
       type="button"
       className="login-link sign-out-button"
@@ -1465,6 +1508,9 @@ const prices = hotelBranches
       </header>
 {authUser?.role === "ADMIN" && showAdminAccommodation && (
   <AdminAccommodation />
+)}
+{authUser?.role === "ADMIN" && showAdminUsers && authUser && (
+  <AdminUsers currentUserId={authUser.id} />
 )}
       <main>
         
@@ -2263,10 +2309,51 @@ const prices = hotelBranches
           {!loading && allBranches.length === 0 && !error && (
             <p className="status-message">Room details will appear here soon.</p>
           )}
+{availableRoomAmenities.length > 0 && (
+  <div className="branch-amenities room-amenity-filters">
+    <strong>Filter rooms by amenities</strong>
 
+    <div className="amenity-list">
+      {availableRoomAmenities.map((amenity) => (
+        <label key={amenity.id} className="amenity-tag">
+          <input
+            type="checkbox"
+            checked={selectedRoomAmenityIds.includes(amenity.id)}
+            onChange={(event) => {
+              setSelectedRoomAmenityIds((previous) =>
+                event.target.checked
+                  ? [...previous, amenity.id]
+                  : previous.filter((id) => id !== amenity.id),
+              );
+            }}
+          />
+          {amenity.name}
+        </label>
+      ))}
+    </div>
+
+    {selectedRoomAmenityIds.length > 0 && (
+      <button
+        type="button"
+        className="login-link sign-out-button"
+        onClick={() => setSelectedRoomAmenityIds([])}
+      >
+        Clear amenity filters
+      </button>
+    )}
+  </div>
+)}
           <div className="room-grid">
-            {allBranches.flatMap((branch) =>
-              (rooms[branch.id] ?? []).map((room) => (
+           {allBranches.flatMap((branch) =>
+  (rooms[branch.id] ?? [])
+    .filter((room) =>
+      selectedRoomAmenityIds.every((amenityId) =>
+        room.amenities?.some(
+          (item) => item.amenityId === amenityId,
+        ),
+      ),
+    )
+    .map((room) => (
                 <article className="room-card" key={room.id}>
                   <div className="room-photo">
                     <div className="room-photo-overlay" />
@@ -2278,6 +2365,19 @@ const prices = hotelBranches
                       <span className="room-capacity">♧ {room.capacity} guests</span>
                     </div>
                     <p>{room.description || "A welcoming room for a comfortable stay."}</p>
+                    {room.amenities && room.amenities.length > 0 && (
+  <div className="branch-amenities room-card-amenities">
+    <strong>Room amenities</strong>
+
+    <div className="amenity-list">
+      {room.amenities.map(({ amenity }) => (
+        <span key={amenity.id} className="amenity-tag">
+          {amenity.name}
+        </span>
+      ))}
+    </div>
+  </div>
+)}
                     <div className="room-meta">
                       <span>{branch.city}</span>
                       <span>{room.totalRooms} rooms in inventory</span>
