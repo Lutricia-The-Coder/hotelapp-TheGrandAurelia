@@ -10,9 +10,16 @@ import favoritesRouter from "./routes/favorites.js";
 import reviewsRouter from "./routes/reviews.js";
 import paymentsRouter from "./routes/payments.js";
 import usersRouter from "./routes/users.js";
+import { fileURLToPath } from "node:url";
+
 const app = express();
 
 app.use(cors());
+const uploadsDirectory = fileURLToPath(
+  new URL("../uploads/", import.meta.url),
+);
+
+app.use("/uploads", express.static(uploadsDirectory));
 app.use("/api/v1/payments", paymentsRouter);
 
 app.use(express.json());

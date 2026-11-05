@@ -3,8 +3,15 @@ import {
   useEffect,
   useState,
   type FormEvent,
+  type ChangeEvent,
 } from "react";
 import { API_BASE_URL } from "./api";
+
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+function getBranchPhotoUrl(photoPath: string): string {
+  if (/^https?:\/\//i.test(photoPath)) return photoPath;
+  return `${API_ORIGIN}${photoPath.startsWith("/") ? "" : "/"}${photoPath}`;
+}
 
 type RoomRecord = {
   id: string;
@@ -14,6 +21,8 @@ type RoomRecord = {
   pricePerNight: number | string;
   totalRooms: number;
 };
+
+type PendingBranchPhoto = { file: File; previewUrl: string; };
 
 type BranchRecord = {
   id: string;
@@ -26,7 +35,10 @@ type BranchRecord = {
   checkInTime?: string | null;
   checkOutTime?: string | null;
   cancellationPolicy?: string | null;
+  images?: string[];
+  coverImage?: string | null;
   roomTypes?: RoomRecord[];
+  
 };
 
 type HotelRecord = {
@@ -107,16 +119,21 @@ async function adminRequest<T>(
     throw new Error("Your session has expired. Please sign in again.");
   }
 
+  const isMultipart =
+    body !== undefined && body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(body !== undefined
+      ...(body !== undefined && !isMultipart
         ? { "Content-Type": "application/json" }
         : {}),
     },
     ...(body !== undefined
-      ? { body: JSON.stringify(body) }
+      ? {
+          body: isMultipart ? body : JSON.stringify(body),
+        }
       : {}),
   });
 
@@ -132,7 +149,6 @@ async function adminRequest<T>(
 
   return result.data as T;
 }
-
 export default function AdminAccommodation() {
   const [hotels, setHotels] = useState<HotelRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,6 +161,92 @@ export default function AdminAccommodation() {
     newBranchForm(),
   );
   const [roomForm, setRoomForm] = useState<RoomForm>(newRoomForm());
+  const [existingBranchImages, setExistingBranchImages] = useState<string[]>([]);
+  const [pendingBranchPhotos, setPendingBranchPhotos] = useState<PendingBranchPhoto[]>([]);
+  const [coverImageSelection, setCoverImageSelection] = useState("");
+
+  function clearBranchPhotoSelection() {
+    pendingBranchPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    setExistingBranchImages([]);
+    setPendingBranchPhotos([]);
+    setCoverImageSelection("");
+  }
+
+  function startNewBranch(hotelId: string) {
+    clearBranchPhotoSelection();
+    setBranchForm(newBranchForm(hotelId));
+    clearFeedback();
+  }
+
+  function editBranch(branch: BranchRecord, hotelId: string) {
+    clearBranchPhotoSelection();
+    const images = branch.images ?? [];
+    setExistingBranchImages(images);
+    setCoverImageSelection(branch.coverImage || images[0] || "");
+    setBranchForm({
+      id: branch.id, hotelId, name: branch.name, address: branch.address,
+      city: branch.city, country: branch.country, phone: branch.phone || "",
+      checkInTime: branch.checkInTime || "", checkOutTime: branch.checkOutTime || "",
+      cancellationPolicy: branch.cancellationPolicy || "",
+    });
+    clearFeedback();
+  }
+function handleBranchPhotoSelection(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? []) as File[];
+    event.target.value = "";
+    if (!selectedFiles.length) return;
+
+    const availableSlots = 8 - existingBranchImages.length - pendingBranchPhotos.length;
+    if (availableSlots <= 0) {
+      setError("A branch can have a maximum of 8 photos.");
+      return;
+    }
+
+    const acceptedFiles: PendingBranchPhoto[] = [];
+    for (const file of selectedFiles) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        setError("Only JPG, PNG and WEBP images are allowed.");
+        break;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Each photo must be 5 MB or smaller.");
+        break;
+      }
+      if (acceptedFiles.length >= availableSlots) {
+        setError("A branch can have a maximum of 8 photos.");
+        break;
+      }
+      acceptedFiles.push({ file, previewUrl: URL.createObjectURL(file) });
+    }
+
+    if (acceptedFiles.length) {
+      const firstIndex = pendingBranchPhotos.length;
+      setPendingBranchPhotos((current) => [...current, ...acceptedFiles]);
+      if (!coverImageSelection && existingBranchImages.length === 0) {
+        setCoverImageSelection(`new:${firstIndex}`);
+      }
+    }
+  }
+
+  function removeExistingBranchImage(photoUrl: string) {
+    const nextImages = existingBranchImages.filter((image) => image !== photoUrl);
+    setExistingBranchImages(nextImages);
+    if (coverImageSelection === photoUrl) {
+      setCoverImageSelection(nextImages[0] || (pendingBranchPhotos.length ? "new:0" : ""));
+    }
+  }
+ function removePendingBranchPhoto(index: number) {
+    const removed = pendingBranchPhotos[index];
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
+    const nextPhotos = pendingBranchPhotos.filter((_, i) => i !== index);
+    setPendingBranchPhotos(nextPhotos);
+    if (coverImageSelection === `new:${index}`) {
+      setCoverImageSelection(existingBranchImages[0] || (nextPhotos.length ? "new:0" : ""));
+    } else if (coverImageSelection.startsWith("new:")) {
+      const selectedIndex = Number(coverImageSelection.slice(4));
+      if (selectedIndex > index) setCoverImageSelection(`new:${selectedIndex - 1}`);
+    }
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -165,8 +267,7 @@ export default function AdminAccommodation() {
           };
         }),
       );
-
-      setHotels(completeHotels);
+setHotels(completeHotels);
     } catch (err) {
       setError(
         err instanceof Error
@@ -224,8 +325,7 @@ export default function AdminAccommodation() {
       setSaving(false);
     }
   }
-
-  async function deleteHotel(hotel: HotelRecord) {
+async function deleteHotel(hotel: HotelRecord) {
     clearFeedback();
 
     const confirmed = window.confirm(
@@ -261,54 +361,50 @@ export default function AdminAccommodation() {
     event.preventDefault();
     clearFeedback();
 
-    if (
-      !branchForm.hotelId ||
-      !branchForm.name.trim() ||
-      !branchForm.address.trim() ||
-      !branchForm.city.trim() ||
-      !branchForm.country.trim()
-    ) {
+    if (!branchForm.hotelId || !branchForm.name.trim() || !branchForm.address.trim() ||
+        !branchForm.city.trim() || !branchForm.country.trim()) {
       setError("Complete all required branch fields.");
+      return;
+    }
+    if (existingBranchImages.length + pendingBranchPhotos.length > 8) {
+      setError("A branch can have a maximum of 8 photos.");
       return;
     }
 
     setSaving(true);
-
     try {
-      const payload = {
-        name: branchForm.name.trim(),
-        address: branchForm.address.trim(),
-        city: branchForm.city.trim(),
-        country: branchForm.country.trim(),
-        ...(branchForm.id
-          ? {
-              phone: branchForm.phone.trim() || null,
-              checkInTime: branchForm.checkInTime.trim() || null,
-              checkOutTime: branchForm.checkOutTime.trim() || null,
-              cancellationPolicy:
-                branchForm.cancellationPolicy.trim() || null,
-            }
-          : { hotelId: branchForm.hotelId }),
-      };
+      const formData = new FormData();
+      formData.append("name", branchForm.name.trim());
+      formData.append("address", branchForm.address.trim());
+      formData.append("city", branchForm.city.trim());
+      formData.append("country", branchForm.country.trim());
 
       if (branchForm.id) {
-        await adminRequest(
-          `/branches/${encodeURIComponent(branchForm.id)}`,
-          "PUT",
-          payload,
-        );
+        formData.append("phone", branchForm.phone.trim());
+        formData.append("checkInTime", branchForm.checkInTime.trim());
+        formData.append("checkOutTime", branchForm.checkOutTime.trim());
+        formData.append("cancellationPolicy", branchForm.cancellationPolicy.trim());
+        formData.append("existingImages", JSON.stringify(existingBranchImages));
+      } else {
+        formData.append("hotelId", branchForm.hotelId);
+      }
+
+      formData.append("coverImage", coverImageSelection);
+      pendingBranchPhotos.forEach((photo) => formData.append("photos", photo.file));
+
+      if (branchForm.id) {
+        await adminRequest(`/branches/${encodeURIComponent(branchForm.id)}`, "PUT", formData);
         setMessage("Branch updated successfully.");
       } else {
-        await adminRequest("/branches", "POST", payload);
+        await adminRequest("/branches", "POST", formData);
         setMessage("Branch created successfully.");
       }
 
+      clearBranchPhotoSelection();
       setBranchForm(newBranchForm());
       await loadData();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save branch.",
-      );
+      setError(err instanceof Error ? err.message : "Failed to save branch.");
     } finally {
       setSaving(false);
     }
@@ -332,6 +428,7 @@ export default function AdminAccommodation() {
       );
 
       if (branchForm.id === branch.id) {
+        clearBranchPhotoSelection();
         setBranchForm(newBranchForm());
       }
 
@@ -357,7 +454,6 @@ export default function AdminAccommodation() {
     const capacity = Number(roomForm.capacity);
     const pricePerNight = Number(roomForm.pricePerNight);
     const totalRooms = Number(roomForm.totalRooms);
-
     if (
       !roomForm.name.trim() ||
       !roomForm.branchId ||
@@ -408,7 +504,6 @@ export default function AdminAccommodation() {
       setSaving(false);
     }
   }
-
   async function deleteRoom(room: RoomRecord) {
     clearFeedback();
 
@@ -476,8 +571,7 @@ export default function AdminAccommodation() {
           {message}
         </p>
       )}
-
-      <form className="admin-form-card" onSubmit={saveHotel}>
+        <form className="admin-form-card" onSubmit={saveHotel}>
         <h3>{hotelForm.id ? "Edit hotel" : "Add a hotel"}</h3>
 
         <div className="admin-form-grid">
@@ -510,8 +604,7 @@ export default function AdminAccommodation() {
             />
           </label>
         </div>
-
-        <div className="admin-form-actions">
+  <div className="admin-form-actions">
           <button type="submit" disabled={saving}>
             {saving
               ? "Saving..."
@@ -563,8 +656,7 @@ export default function AdminAccommodation() {
                   >
                     Edit hotel
                   </button>
-
-                  <button
+                    <button
                     type="button"
                     className="admin-danger-button"
                     onClick={() => void deleteHotel(hotel)}
@@ -580,9 +672,7 @@ export default function AdminAccommodation() {
                   <h4>Branches</h4>
                   <button
                     type="button"
-                    onClick={() =>
-                      setBranchForm(newBranchForm(hotel.id))
-                    }
+                    onClick={() => startNewBranch(hotel.id)}
                     disabled={saving}
                   >
                     + Add branch
@@ -626,7 +716,7 @@ export default function AdminAccommodation() {
                           required
                         />
                       </label>
-
+                      
                       <label>
                         City *
                         <input
@@ -714,6 +804,52 @@ export default function AdminAccommodation() {
                         </>
                       )}
                     </div>
+ <div style={{ marginTop: 18 }}>
+                      <h5>Branch photos</h5>
+                      <p style={{ margin: "6px 0 12px", color: "#666" }}>
+                        Add up to 8 JPG, PNG or WEBP photos. Each photo must be 5 MB or smaller.
+                        Choose one image as the cover photo.
+                      </p>
+                      <label style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                        Add photos
+                        <input type="file" accept="image/jpeg,image/png,image/webp" multiple
+                          onChange={handleBranchPhotoSelection}
+                          disabled={saving || existingBranchImages.length + pendingBranchPhotos.length >= 8} />
+                      </label>
+                      {(existingBranchImages.length > 0 || pendingBranchPhotos.length > 0) ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, marginTop: 14 }}>
+                          {existingBranchImages.map((photoUrl) => (
+                            <div key={photoUrl} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8 }}>
+                              <img src={getBranchPhotoUrl(photoUrl)} alt="Branch"
+                                style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 5 }} />
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                                <button type="button" className="admin-secondary-button"
+                                  onClick={() => setCoverImageSelection(photoUrl)} disabled={saving}>
+                                  {coverImageSelection === photoUrl ? "Cover photo" : "Set as cover"}
+                                </button>
+                                <button type="button" className="admin-danger-button"
+                                  onClick={() => removeExistingBranchImage(photoUrl)} disabled={saving}>Remove</button>
+                              </div>
+                            </div>
+                          ))}
+                          {pendingBranchPhotos.map((photo, index) => (
+                            <div key={photo.previewUrl} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 8 }}>
+                              <img src={photo.previewUrl} alt={photo.file.name}
+                                style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 5 }} />
+                              <small style={{ display: "block", overflowWrap: "anywhere", marginTop: 6 }}>{photo.file.name}</small>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                                <button type="button" className="admin-secondary-button"
+                                  onClick={() => setCoverImageSelection(`new:${index}`)} disabled={saving}>
+                                  {coverImageSelection === `new:${index}` ? "Cover photo" : "Set as cover"}
+                                </button>
+                                <button type="button" className="admin-danger-button"
+                                  onClick={() => removePendingBranchPhoto(index)} disabled={saving}>Remove</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p style={{ marginTop: 10 }}>No branch photos selected.</p>}
+                    </div>
 
                     <div className="admin-form-actions">
                       <button type="submit" disabled={saving}>
@@ -722,7 +858,10 @@ export default function AdminAccommodation() {
                       <button
                         type="button"
                         className="admin-secondary-button"
-                        onClick={() => setBranchForm(newBranchForm())}
+                        onClick={() => {
+                          clearBranchPhotoSelection();
+                          setBranchForm(newBranchForm());
+                        }}
                         disabled={saving}
                       >
                         Cancel
@@ -743,26 +882,11 @@ export default function AdminAccommodation() {
                           {branch.roomTypes?.length ?? 0} room type(s)
                         </small>
                       </div>
-
-                      <div className="admin-inline-actions">
+                       <div className="admin-inline-actions">
                         <button
                           type="button"
                           className="admin-secondary-button"
-                          onClick={() =>
-                            setBranchForm({
-                              id: branch.id,
-                              hotelId: hotel.id,
-                              name: branch.name,
-                              address: branch.address,
-                              city: branch.city,
-                              country: branch.country,
-                              phone: branch.phone || "",
-                              checkInTime: branch.checkInTime || "",
-                              checkOutTime: branch.checkOutTime || "",
-                              cancellationPolicy:
-                                branch.cancellationPolicy || "",
-                            })
-                          }
+                          onClick={() => editBranch(branch, hotel.id)}
                           disabled={saving}
                         >
                           Edit branch
@@ -779,6 +903,11 @@ export default function AdminAccommodation() {
                       </div>
                     </div>
 
+                    {branch.coverImage && (
+                      <img src={getBranchPhotoUrl(branch.coverImage)} alt={`${branch.name} cover`}
+                        style={{ width: "100%", maxWidth: 320, height: 150, objectFit: "cover", borderRadius: 8, margin: "12px 0" }} />
+                    )}
+
                     <div className="admin-subheading">
                       <h5>Room types</h5>
                       <button
@@ -793,7 +922,7 @@ export default function AdminAccommodation() {
                     </div>
 
                     {roomForm.branchId === branch.id && (
-                      <form
+                     <form
                         className="admin-form-card admin-nested-form"
                         onSubmit={saveRoom}
                       >
@@ -881,8 +1010,7 @@ export default function AdminAccommodation() {
                             />
                           </label>
                         </div>
-
-                        <div className="admin-form-actions">
+                         <div className="admin-form-actions">
                           <button type="submit" disabled={saving}>
                             {roomForm.id ? "Save room type" : "Create room type"}
                           </button>
@@ -907,8 +1035,8 @@ export default function AdminAccommodation() {
                             <div>
                               <strong>{room.name}</strong>
                               <p>
-                                Capacity: {room.capacity} · Rooms:{" "}
-                                {room.totalRooms} · Nightly rate:{" "}
+                                Capacity: {room.capacity} Â· Rooms:{" "}
+                                {room.totalRooms} Â· Nightly rate:{" "}
                                 {Number(room.pricePerNight).toLocaleString(
                                   "en-ZA",
                                   {
@@ -939,7 +1067,6 @@ export default function AdminAccommodation() {
                               >
                                 Edit
                               </button>
-
                               <button
                                 type="button"
                                 className="admin-danger-button"

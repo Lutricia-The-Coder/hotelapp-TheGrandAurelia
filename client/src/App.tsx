@@ -24,6 +24,8 @@ type Branch = {
   checkInTime?: string | null;
   checkOutTime?: string | null;
   cancellationPolicy?: string | null;
+  images?: string[];
+coverImage?: string | null;
   amenities?: {
     amenity: {
       id: string;
@@ -32,7 +34,28 @@ type Branch = {
   }[];
 };
 
+function getBranchPhotos(branch: Branch): string[] {
+  const photos = branch.images ?? [];
 
+  if (branch.coverImage) {
+    return [
+      branch.coverImage,
+      ...photos.filter((photo) => photo !== branch.coverImage),
+    ];
+  }
+
+  return photos;
+}
+
+function getBranchPhotoUrl(photoPath: string): string {
+  if (/^https?:\/\//i.test(photoPath)) {
+    return photoPath;
+  }
+
+  const apiOrigin = API_BASE_URL.replace(/\/api\/v1$/, "");
+
+  return `${apiOrigin}${photoPath.startsWith("/") ? "" : "/"}${photoPath}`;
+}
 type RoomType = {
   id: string;
   name: string;
@@ -61,7 +84,11 @@ function App() {
   const [galleryIndexes, setGalleryIndexes] = useState<
   Record<string, number>
 >({});
-  
+  const [activeBranchPhoto, setActiveBranchPhoto] = useState<{
+  branchName: string;
+  photos: string[];
+  index: number;
+} | null>(null);
 const [hotelSearch, setHotelSearch] = useState("");
 const [locationSearch, setLocationSearch] = useState("");
 const [minNightlyPrice, setMinNightlyPrice] = useState("");
@@ -2001,6 +2028,88 @@ const prices = hotelBranches
                         <span className="location-dot" />
                         <strong>{branch.name}</strong>
                       </div>
+                      {getBranchPhotos(branch).length > 0 && (
+  <div className="branch-photo-gallery">
+  <img
+  className="branch-photo-image"
+  src={getBranchPhotoUrl(
+    getBranchPhotos(branch)[
+      (galleryIndexes[`branch-${branch.id}`] ?? 0) %
+        getBranchPhotos(branch).length
+    ],
+  )}
+  alt={`${branch.name} accommodation`}
+  loading="lazy"
+  role="button"
+  tabIndex={0}
+  aria-label={`Enlarge photo of ${branch.name}`}
+  onClick={() =>
+    setActiveBranchPhoto({
+      branchName: branch.name,
+      photos: getBranchPhotos(branch),
+      index:
+        (galleryIndexes[`branch-${branch.id}`] ?? 0) %
+        getBranchPhotos(branch).length,
+    })
+  }
+  onKeyDown={(event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setActiveBranchPhoto({
+        branchName: branch.name,
+        photos: getBranchPhotos(branch),
+        index:
+          (galleryIndexes[`branch-${branch.id}`] ?? 0) %
+          getBranchPhotos(branch).length,
+      });
+    }
+  }}
+/>
+
+    {getBranchPhotos(branch).length > 1 && (
+      <div className="branch-gallery-controls">
+        <button
+          type="button"
+          aria-label={`Previous photo of ${branch.name}`}
+          onClick={() =>
+            setGalleryIndexes((current) => ({
+              ...current,
+              [`branch-${branch.id}`]:
+                ((current[`branch-${branch.id}`] ?? 0) -
+                  1 +
+                  getBranchPhotos(branch).length) %
+                getBranchPhotos(branch).length,
+            }))
+          }
+        >
+          ‹
+        </button>
+
+        <span>
+          {((galleryIndexes[`branch-${branch.id}`] ?? 0) %
+            getBranchPhotos(branch).length) + 1}
+          {" / "}
+          {getBranchPhotos(branch).length}
+        </span>
+
+        <button
+          type="button"
+          aria-label={`Next photo of ${branch.name}`}
+          onClick={() =>
+            setGalleryIndexes((current) => ({
+              ...current,
+              [`branch-${branch.id}`]:
+                ((current[`branch-${branch.id}`] ?? 0) + 1) %
+                getBranchPhotos(branch).length,
+            }))
+          }
+        >
+          ›
+        </button>
+      </div>
+    )}
+  </div>
+)}
                      
 <p>
   {branch.address}, {branch.city}, {branch.country}
@@ -2890,6 +2999,85 @@ const prices = hotelBranches
         <p>Thoughtfully hosted in Mpumalanga, South Africa.</p>
         <span className="footer-copyright">© {new Date().getFullYear()} The Grand Aurelia</span>
       </footer>
+            {activeBranchPhoto && (
+        <div
+          className="branch-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${activeBranchPhoto.branchName} photo viewer`}
+          onClick={() => setActiveBranchPhoto(null)}
+        >
+          <div
+            className="branch-lightbox-content"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="branch-lightbox-close"
+              aria-label="Close photo viewer"
+              onClick={() => setActiveBranchPhoto(null)}
+            >
+              &times;
+            </button>
+
+            <img
+              className="branch-lightbox-image"
+              src={getBranchPhotoUrl(
+                activeBranchPhoto.photos[activeBranchPhoto.index],
+              )}
+              alt={`${activeBranchPhoto.branchName} accommodation`}
+            />
+
+            {activeBranchPhoto.photos.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="branch-lightbox-prev"
+                  aria-label="Previous photo"
+                  onClick={() =>
+                    setActiveBranchPhoto((current) =>
+                      current
+                        ? {
+                            ...current,
+                            index:
+                              (current.index - 1 + current.photos.length) %
+                              current.photos.length,
+                          }
+                        : null,
+                    )
+                  }
+                >
+                  &#10094;
+                </button>
+
+                <button
+                  type="button"
+                  className="branch-lightbox-next"
+                  aria-label="Next photo"
+                  onClick={() =>
+                    setActiveBranchPhoto((current) =>
+                      current
+                        ? {
+                            ...current,
+                            index: (current.index + 1) % current.photos.length,
+                          }
+                        : null,
+                    )
+                  }
+                >
+                  &#10095;
+                </button>
+              </>
+            )}
+
+            <div className="branch-lightbox-caption">
+              {activeBranchPhoto.branchName} ·{" "}
+              {activeBranchPhoto.index + 1} of{" "}
+              {activeBranchPhoto.photos.length}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
