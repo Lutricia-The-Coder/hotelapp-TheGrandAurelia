@@ -499,6 +499,96 @@ export type FavoriteHotel = {
   };
 };
 
+export type FavoriteBranch = {
+  userId: string;
+  branchId: string;
+  createdAt: string;
+  branch: {
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    country: string;
+    images: string[];
+    coverImage: string | null;
+    hotel: {
+      id: string;
+      name: string;
+      description: string | null;
+    };
+  };
+};
+
+export async function getFavoriteBranches(
+  token: string,
+): Promise<FavoriteBranch[]> {
+  const response = await fetch(`${API_BASE_URL}/favorites/branches`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const result: {
+    success: boolean;
+    data?: FavoriteBranch[];
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load favorites.");
+  }
+
+  return result.data ?? [];
+}
+
+export async function addFavoriteBranch(
+  branchId: string,
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/favorites/branches/${encodeURIComponent(branchId)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to add favorite.");
+  }
+}
+
+export async function removeFavoriteBranch(
+  branchId: string,
+  token: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/favorites/branches/${encodeURIComponent(branchId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const result: {
+    success: boolean;
+    message?: string;
+  } = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to remove favorite.");
+  }
+}
+
 export async function getFavoriteHotels(
   token: string,
 ): Promise<FavoriteHotel[]> {
@@ -634,5 +724,4 @@ export async function submitHotelReview(
 
   return result.data;
 }
-
 

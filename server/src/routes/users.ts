@@ -7,6 +7,10 @@ import {
   requireAdmin,
   type AuthenticatedRequest,
 } from "../middleware/auth.js";
+import {
+  meetsPasswordPolicy,
+  PASSWORD_POLICY_MESSAGE,
+} from "../lib/password-policy.js";
 
 const router = Router();
 
@@ -347,13 +351,11 @@ router.patch(
 
       if (
         typeof newPassword !== "string" ||
-        newPassword.length < 8 ||
-        Buffer.byteLength(newPassword, "utf8") > 72
+        !meetsPasswordPolicy(newPassword)
       ) {
         res.status(400).json({
           success: false,
-          message:
-            "Your new password must be at least 8 characters and no more than 72 bytes.",
+          message: PASSWORD_POLICY_MESSAGE,
         });
         return;
       }

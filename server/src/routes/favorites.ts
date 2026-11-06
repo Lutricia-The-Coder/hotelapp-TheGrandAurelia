@@ -13,6 +13,144 @@ const isUuid = (value: string) =>
     value,
   );
 
+// GET /api/v1/favorites/branches
+// Return the signed-in user's saved branches.
+router.get(
+  "/branches",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const favorites = await prisma.branchFavorite.findMany({
+        where: { userId: req.user!.id },
+        include: {
+          branch: {
+            include: {
+              hotel: true,
+              amenities: { include: { amenity: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      res.status(200).json({
+        success: true,
+        count: favorites.length,
+        data: favorites,
+      });
+    } catch (error) {
+      console.error("Failed to load branch favorites:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to load branch favorites.",
+      });
+    }
+  },
+);
+
+// POST /api/v1/favorites/branches/:branchId
+router.post(
+  "/branches/:branchId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const branchId = req.params.branchId;
+
+      if (typeof branchId !== "string" || !isUuid(branchId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid branch ID.",
+        });
+        return;
+      }
+
+      const branch = await prisma.hotelBranch.findUnique({
+        where: { id: branchId },
+        select: { id: true },
+      });
+
+      if (!branch) {
+        res.status(404).json({
+          success: false,
+          message: "Branch not found.",
+        });
+        return;
+      }
+
+      const favorite = await prisma.branchFavorite.upsert({
+        where: {
+          userId_branchId: {
+            userId: req.user!.id,
+            branchId,
+          },
+        },
+        update: {},
+        create: {
+          userId: req.user!.id,
+          branchId,
+        },
+        include: {
+          branch: {
+            include: {
+              hotel: true,
+              amenities: { include: { amenity: true } },
+            },
+          },
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Branch added to favorites.",
+        data: favorite,
+      });
+    } catch (error) {
+      console.error("Failed to add branch favorite:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to add branch to favorites.",
+      });
+    }
+  },
+);
+
+// DELETE /api/v1/favorites/branches/:branchId
+router.delete(
+  "/branches/:branchId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const branchId = req.params.branchId;
+
+      if (typeof branchId !== "string" || !isUuid(branchId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid branch ID.",
+        });
+        return;
+      }
+
+      await prisma.branchFavorite.deleteMany({
+        where: {
+          userId: req.user!.id,
+          branchId,
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Branch removed from favorites.",
+      });
+    } catch (error) {
+      console.error("Failed to remove branch favorite:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to remove branch from favorites.",
+      });
+    }
+  },
+);
+
 // GET /api/v1/favorites
 // Return the signed-in user's saved hotels.
 router.get(

@@ -1,96 +1,408 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import type { Branch, RoomType, Hotel } from "./types/hotel";
+import Footer from "./components/Footer";
+import { getBranchPhotoUrl } from "./utils/branchPhotos";
+import Header from "./components/Header";
+import AuthModal from "./components/AuthModal";
+import MyBookingsPage from "./pages/MyBookingsPage";
+import ProfilePage from "./pages/ProfilePage";
+import AdminReservationsPage from "./pages/AdminReservationsPage";
+import FavouritesPage from "./pages/FavouritesPage";
+import DiscoverPage from "./pages/DiscoverPage";
+import BranchMapPage from "./pages/BranchMapPage";
+import BranchStayPage from "./pages/BranchStayPage";
+import BookingPage from "./pages/BookingPage";
 import {
 API_BASE_URL,changeMyPassword,createBooking,getPaymentStatus,cancelPendingCheckout,
   getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
-  updateAdminBookingStatus, modifyAdminBooking,getFavoriteHotels, addFavoriteHotel,removeFavoriteHotel,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteHotel,type AuthUser,getMyProfile,
+updateAdminBookingStatus, modifyAdminBooking,getFavoriteBranches, addFavoriteBranch,removeFavoriteBranch,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteBranch,type AuthUser,getMyProfile,
 updateMyProfile,
 type UserProfile,} from "./api";
 import "./index.css";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store/store";
 import { setUser, clearUser } from "./store/authSlice";
-import AdminAccommodation from "./AdminAccommodation";
+import AdminAccommodation from "./pages/AdminAccommodationPage";
 import AdminUsers from "./AdminUsers";
+import useConfirmDialog from "./components/ConfirmDialog";
+import { ToastMessage } from "./components/ToastNotifications";
 import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
+import "./redesign.css";
+import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./utils/passwordPolicy";
 
-
-type Branch = {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  country: string;
-  phone?: string | null;
-  checkInTime?: string | null;
-  checkOutTime?: string | null;
-  cancellationPolicy?: string | null;
-  images?: string[];
-coverImage?: string | null;
-  amenities?: {
-    amenity: {
-      id: string;
-      name: string;
-    };
-  }[];
+type AdminPage =
+  | "dashboard"
+  | "branches"
+  | "rooms"
+  | "bookings"
+  | "customers"
+  | "reviews"
+  | "analytics"
+  | "profile";
+type GuestPage = "discover" | "map" | "stay" | "favorites" | "bookings" | "profile";
+type PersistedNavigation = {
+  guestPage: GuestPage;
+  adminPage: AdminPage;
+  adminPortalOpen: boolean;
+  selectedHotelId?: string;
+  selectedBranchId?: string;
 };
 
-function getBranchPhotos(branch: Branch): string[] {
-  const photos = branch.images ?? [];
-
-  if (branch.coverImage) {
-    return [
-      branch.coverImage,
-      ...photos.filter((photo) => photo !== branch.coverImage),
+function readPersistedNavigation(): Partial<PersistedNavigation> {
+  try {
+    const saved = sessionStorage.getItem("hotelAppNavigation");
+    if (!saved) return {};
+    const value: unknown = JSON.parse(saved);
+    if (typeof value !== "object" || value === null) return {};
+    const state = value as Partial<PersistedNavigation>;
+    const guestPages: GuestPage[] = [
+      "discover",
+      "map",
+      "stay",
+      "favorites",
+      "bookings",
+      "profile",
     ];
-  }
-
-  return photos;
-}
-
-function getBranchPhotoUrl(photoPath: string): string {
-  if (/^https?:\/\//i.test(photoPath)) {
-    return photoPath;
-  }
-
-  const apiOrigin = API_BASE_URL.replace(/\/api\/v1$/, "");
-
-  return `${apiOrigin}${photoPath.startsWith("/") ? "" : "/"}${photoPath}`;
-}
-type RoomType = {
-  id: string;
-  name: string;
-  description?: string | null;
-  capacity: number;
-  pricePerNight: number;
-  totalRooms: number;
-  amenities?: {
-    amenityId: string;
-    amenity: {
-      id: string;
-      name: string;
+    const adminPages: AdminPage[] = [
+      "dashboard",
+      "branches",
+      "rooms",
+      "bookings",
+      "customers",
+      "reviews",
+      "analytics",
+      "profile",
+    ];
+    return {
+      guestPage: guestPages.includes(state.guestPage as GuestPage)
+        ? state.guestPage
+        : "discover",
+      adminPage: adminPages.includes(state.adminPage as AdminPage)
+        ? state.adminPage
+        : "dashboard",
+      adminPortalOpen: state.adminPortalOpen === true,
+      selectedHotelId:
+        typeof state.selectedHotelId === "string" ? state.selectedHotelId : undefined,
+      selectedBranchId:
+        typeof state.selectedBranchId === "string" ? state.selectedBranchId : undefined,
     };
-  }[];
-};
-type Hotel = {
-  id: string;
-  name: string;
-  description?: string | null;
-  images?: {
-    id: string;
-    url: string;
-    altText?: string | null;
-    sortOrder: number;
-  }[];
-};
+  } catch {
+    return {};
+  }
+}
 
-function App() {
+const adminNavigation: {
+  id: AdminPage;
+  label: string;
+  icon: string;
+}[] = [
+  { id: "dashboard", label: "Dashboard", icon: "grid" },
+  { id: "branches", label: "Branches", icon: "hotel" },
+  { id: "rooms", label: "Rooms", icon: "bed" },
+  { id: "bookings", label: "Bookings", icon: "calendar" },
+  { id: "customers", label: "Customers", icon: "users" },
+  { id: "reviews", label: "Reviews", icon: "star" },
+  { id: "analytics", label: "Analytics", icon: "chart" },
+];
+
+function PortalIcon({ name }: { name: string }) {
+  const paths: Record<string, ReactNode> = {
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    hotel: <><path d="M4 21V5l8-3 8 3v16" /><path d="M9 21v-4h6v4M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01" /></>,
+    bed: <><path d="M2 4v16M22 20V9a2 2 0 0 0-2-2h-8v13M2 14h20" /><path d="M6 7h3a3 3 0 0 1 3 3v4H4V9a2 2 0 0 1 2-2Z" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+    star: <path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z" />,
+    chart: <><path d="M3 3v18h18" /><path d="m7 16 4-5 4 3 5-7" /></>,
+  };
+
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function AdminPortal({
+  activePage,
+  userName,
+  onNavigate,
+  onTogglePortal,
+  onOpenProfile,
+  children,
+}: {
+  activePage: AdminPage;
+  userName: string;
+  onNavigate: (page: AdminPage) => void;
+  onTogglePortal: () => void;
+  onOpenProfile: () => void;
+  children: ReactNode;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const activeTitle =
+    activePage === "profile"
+      ? "My Profile"
+      : adminNavigation.find((item) => item.id === activePage)?.label ?? "Dashboard";
+
+  function navigate(page: AdminPage) {
+    onNavigate(page);
+    setMenuOpen(false);
+  }
+
+  return (
+    <div className="admin-shell">
+      <aside className={`portal-sidebar ${menuOpen ? "open" : ""}`}>
+        <div className="portal-brand">
+          <span className="portal-brand-mark">A</span>
+          <span><b>THE GRAND AURELIA</b><small>MANAGEMENT PORTAL</small></span>
+          <button
+            type="button"
+            className="portal-close"
+            onClick={() => setMenuOpen(false)}
+            aria-label="Close navigation"
+          >
+            ×
+          </button>
+        </div>
+        <nav aria-label="Admin navigation">
+          <p className="portal-nav-label">MAIN MENU</p>
+          {adminNavigation.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={activePage === item.id ? "active" : ""}
+              onClick={() => navigate(item.id)}
+            >
+              <PortalIcon name={item.icon} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <button type="button" className="portal-logout" onClick={onTogglePortal}>
+          <span aria-hidden="true">↗</span> View guest site
+        </button>
+      </aside>
+
+      {menuOpen && (
+        <button
+          type="button"
+          className="portal-scrim"
+          onClick={() => setMenuOpen(false)}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <div className="admin-content">
+        <header className="portal-topbar">
+          <div className="portal-heading">
+            <button
+              type="button"
+              className="portal-menu-button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open navigation"
+            >
+              <span /><span /><span />
+            </button>
+            <div>
+              <p>MANAGEMENT PORTAL</p>
+              <h1>{activeTitle}</h1>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="portal-profile"
+            onClick={onOpenProfile}
+            aria-label={`View profile for ${userName}`}
+          >
+            <span>{userName.slice(0, 1).toUpperCase()}</span>
+            <b>{userName}</b>
+          </button>
+        </header>
+        <main className="portal-main">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard({
+  hotels,
+  userName,
+  branchCount,
+  roomCount,
+  bookings,
+  loading,
+  error,
+  onRefresh,
+  onViewBookings,
+}: {
+  hotels: Hotel[];
+  userName: string | null;
+  branchCount: number;
+  roomCount: number;
+  bookings: AdminBooking[];
+  loading: boolean;
+  error: string;
+  onRefresh: () => void;
+  onViewBookings: () => void;
+}) {
+  const confirmedCount = bookings.filter(
+    (booking) => booking.status === "CONFIRMED",
+  ).length;
+  const customerCount = new Set(bookings.map((booking) => booking.user.id)).size;
+  const recentBookings = [...bookings]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .slice(0, 5);
+
+  return (
+    <>
+      <section className="portal-welcome">
+        <div>
+          <p>{new Date().toLocaleDateString("en-ZA", { dateStyle: "full" })}</p>
+          <h2>
+            {userName?.trim()
+              ? `Welcome back, ${userName.trim().split(/\s+/)[0]}.`
+              : "Welcome back."}
+          </h2>
+          <span>Here’s what’s happening across your properties today.</span>
+        </div>
+        <button type="button" className="portal-primary-button" onClick={onRefresh} disabled={loading}>
+          {loading ? "Refreshing..." : "Refresh reservations"}
+        </button>
+      </section>
+
+      <ToastMessage message={error} />
+
+      <section className="portal-stats" aria-label="Property statistics">
+        {[
+          ["Properties", hotels.length, "hotel"],
+          ["Branches", branchCount, "hotel"],
+          ["Room types", roomCount, "bed"],
+          ["Confirmed stays", confirmedCount, "calendar"],
+          ["Customers with bookings", customerCount, "users"],
+        ].map(([label, value, icon]) => (
+          <article className="portal-stat-card" key={label}>
+            <span><PortalIcon name={String(icon)} /></span>
+            <p>{label}</p>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="portal-table-card">
+        <div className="portal-card-heading">
+          <div><p>LATEST ACTIVITY</p><h3>Recent Bookings</h3></div>
+          <button type="button" className="portal-text-button" onClick={onViewBookings}>
+            View all →
+          </button>
+        </div>
+        {loading && <p className="portal-empty">Loading reservations...</p>}
+        {!loading && recentBookings.length === 0 && (
+          <p className="portal-empty">No reservation data is available yet.</p>
+        )}
+        {!loading && recentBookings.length > 0 && (
+          <div className="portal-table-scroll">
+            <table>
+              <thead>
+                <tr><th>Reference</th><th>Guest</th><th>Property</th><th>Stay</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {recentBookings.map((booking) => (
+                  <tr key={booking.id}>
+                    <td><b>{booking.id.slice(0, 8).toUpperCase()}</b></td>
+                    <td>{booking.user.name || booking.user.email}</td>
+                    <td>{booking.roomType.branch.hotel.name}</td>
+                    <td>
+                      {new Date(booking.checkIn).toLocaleDateString("en-ZA")} –{" "}
+                      {new Date(booking.checkOut).toLocaleDateString("en-ZA")}
+                    </td>
+                    <td><span className={`portal-status ${booking.status.toLowerCase()}`}>{booking.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function AdminAnalytics({
+  bookings,
+  loading,
+  error,
+  onRefresh,
+}: {
+  bookings: AdminBooking[];
+  loading: boolean;
+  error: string;
+  onRefresh: () => void;
+}) {
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    return {
+      date,
+      count: bookings.filter((booking) => {
+        const createdAt = new Date(booking.createdAt);
+        return (
+          createdAt.getFullYear() === date.getFullYear() &&
+          createdAt.getMonth() === date.getMonth()
+        );
+      }).length,
+    };
+  });
+  const maxCount = Math.max(1, ...months.map((month) => month.count));
+
+  return (
+    <section className="portal-chart-card">
+      <div className="portal-card-heading">
+        <div><p>RESERVATIONS</p><h3>Bookings by month</h3></div>
+        <button type="button" className="portal-primary-button" onClick={onRefresh} disabled={loading}>
+          {loading ? "Loading..." : "Refresh data"}
+        </button>
+      </div>
+      <ToastMessage message={error} />
+      {loading ? (
+        <p className="portal-empty">Loading reservation data...</p>
+      ) : bookings.length === 0 ? (
+        <p className="portal-empty">No reservation history is available to chart.</p>
+      ) : (
+        <div className="portal-bar-chart" role="img" aria-label="Reservations created in the last six months">
+          {months.map(({ date, count }) => (
+            <div className="portal-bar-column" key={`${date.getFullYear()}-${date.getMonth()}`}>
+              <strong>{count}</strong>
+              <span style={{ height: `${Math.max(5, (count / maxCount) * 100)}%` }} />
+              <small>{date.toLocaleDateString("en", { month: "short" })}</small>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="portal-chart-note">Monthly totals are based on reservation creation dates.</p>
+    </section>
+  );
+}
+
+function AppContent() {
+  const { confirm, dialog: confirmationDialog } = useConfirmDialog();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [branches, setBranches] = useState<Record<string, Branch[]>>({});
   const [rooms, setRooms] = useState<Record<string, RoomType[]>>({});
-  const [galleryIndexes, setGalleryIndexes] = useState<
-  Record<string, number>
->({});
   const [activeBranchPhoto, setActiveBranchPhoto] = useState<{
   branchName: string;
   photos: string[];
@@ -110,6 +422,9 @@ const [selectedRoomAmenityIds, setSelectedRoomAmenityIds] = useState<string[]>([
 const authUser = useSelector(
   (state: RootState) => state.auth.user,
 );
+const [restoredNavigation] = useState(readPersistedNavigation);
+const previousAuthUserId = useRef(authUser?.id ?? null);
+const restoredAccountDataLoaded = useRef(false);
 
   const [authName, setAuthName] = useState("");
 const [authEmail, setAuthEmail] = useState("");
@@ -128,7 +443,6 @@ const [bookingQuantity, setBookingQuantity] = useState(1);
 const [bookingMessage, setBookingMessage] = useState("");
 const [bookingError, setBookingError] = useState("");
 const [bookingLoading, setBookingLoading] = useState(false);
-const [showProfile, setShowProfile] = useState(false);
 const [profile, setProfile] = useState<UserProfile | null>(null);
 const [profileName, setProfileName] = useState("");
 const [profileTitle, setProfileTitle] = useState("");
@@ -162,24 +476,40 @@ const bookingConfirmation = useSelector(
 
 const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 const [cancellationMessage, setCancellationMessage] = useState("");
-const [showMyBookings, setShowMyBookings] = useState(false);
 
 const [adminBookings, setAdminBookings] = useState<AdminBooking[]>([]);
 const [adminBookingsLoading, setAdminBookingsLoading] = useState(false);
 const [adminBookingsError, setAdminBookingsError] = useState("");
 const [adminBookingsMessage, setAdminBookingsMessage] = useState("");
 const [adminActionBookingId, setAdminActionBookingId] = useState<string | null>(null);
-const [showAdminBookings, setShowAdminBookings] = useState(false);
-const [showAdminAccommodation, setShowAdminAccommodation] =
-  useState(false);
-  const [showAdminUsers, setShowAdminUsers] = useState(false);
-const [favoriteHotelIds, setFavoriteHotelIds] = useState<string[]>([]);
-const [favoriteHotels, setFavoriteHotels] = useState<FavoriteHotel[]>([]);
+const [bookingToModify, setBookingToModify] = useState<AdminBooking | null>(null);
+const [modifyBookingForm, setModifyBookingForm] = useState({
+  checkIn: "",
+  checkOut: "",
+  adults: "1",
+  children: "0",
+  roomQuantity: "1",
+});
+const [modifyBookingError, setModifyBookingError] = useState("");
+const [adminPortalOpen, setAdminPortalOpen] = useState(
+  () => restoredNavigation.adminPortalOpen ?? authUser?.role === "ADMIN",
+);
+const [adminPage, setAdminPage] = useState<AdminPage>(
+  () => restoredNavigation.adminPage ?? "dashboard",
+);
+const [favoriteBranchIds, setFavoriteBranchIds] = useState<string[]>([]);
+const [favoriteBranches, setFavoriteBranches] = useState<FavoriteBranch[]>([]);
 const [favoritesLoading, setFavoritesLoading] = useState(false);
 const [favoritesError, setFavoritesError] = useState("");
 const [favoritesMessage, setFavoritesMessage] = useState("");
-const [favoriteActionHotelId, setFavoriteActionHotelId] = useState<string | null>(null);
-const [showFavorites, setShowFavorites] = useState(false);
+const [favoriteActionBranchId, setFavoriteActionBranchId] = useState<string | null>(null);
+const [guestPage, setGuestPage] = useState<GuestPage>(
+  () => restoredNavigation.guestPage ?? "discover",
+);
+const [selectedStay, setSelectedStay] = useState<{
+  hotel: Hotel;
+  branch: Branch;
+} | null>(null);
 const [hotelReviews, setHotelReviews] = useState<
   Record<string, HotelReviewsResponse>
 >({});
@@ -191,7 +521,7 @@ const [reviewRatings, setReviewRatings] = useState<Record<string, number>>({});
 const [reviewComments, setReviewComments] = useState<Record<string, string>>({});
 const [reviewSubmittingHotelId, setReviewSubmittingHotelId] = useState<string | null>(null);
 
-async function handleLoadAdminBookings() {
+const handleLoadAdminBookings = useCallback(async () => {
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
@@ -199,7 +529,6 @@ async function handleLoadAdminBookings() {
     return;
   }
 
-  setShowAdminBookings(true);
   setAdminBookingsLoading(true);
   setAdminBookingsError("");
   setAdminBookingsMessage("");
@@ -216,7 +545,78 @@ async function handleLoadAdminBookings() {
   } finally {
     setAdminBookingsLoading(false);
   }
-}
+}, []);
+
+useEffect(() => {
+  if (authUser?.role !== "ADMIN") return;
+
+  if (previousAuthUserId.current !== authUser.id) {
+    setAdminPortalOpen(true);
+    setAdminPage("dashboard");
+  }
+  previousAuthUserId.current = authUser.id;
+  void handleLoadAdminBookings();
+}, [authUser?.id, authUser?.role, handleLoadAdminBookings]);
+
+useEffect(() => {
+  if (authUser?.role !== "ADMIN") {
+    previousAuthUserId.current = authUser?.id ?? null;
+  }
+}, [authUser?.id, authUser?.role]);
+
+useEffect(() => {
+  try {
+    sessionStorage.setItem(
+      "hotelAppNavigation",
+      JSON.stringify({
+        guestPage,
+        adminPage,
+        adminPortalOpen,
+        selectedHotelId:
+          guestPage === "stay"
+            ? selectedStay?.hotel.id ?? restoredNavigation.selectedHotelId
+            : undefined,
+        selectedBranchId:
+          guestPage === "stay"
+            ? selectedStay?.branch.id ?? restoredNavigation.selectedBranchId
+            : undefined,
+      } satisfies PersistedNavigation),
+    );
+  } catch (error) {
+    console.error("Unable to persist the current page.", error);
+  }
+}, [
+  adminPage,
+  adminPortalOpen,
+  guestPage,
+  restoredNavigation.selectedBranchId,
+  restoredNavigation.selectedHotelId,
+  selectedStay,
+]);
+
+useEffect(() => {
+  const token = sessionStorage.getItem("hotelAuthToken");
+  if (!authUser?.id || !token) return;
+
+  let isCurrent = true;
+  void getFavoriteBranches(token)
+    .then((saved) => {
+      if (!isCurrent) return;
+      setFavoriteBranches(saved);
+      setFavoriteBranchIds(saved.map((favorite) => favorite.branchId));
+    })
+    .catch((error: unknown) => {
+      if (!isCurrent) return;
+      setFavoritesError(
+        error instanceof Error ? error.message : "Failed to load favorites.",
+      );
+    });
+
+  return () => {
+    isCurrent = false;
+  };
+}, [authUser?.id]);
+
 async function handleLoadProfile() {
   const token = sessionStorage.getItem("hotelAuthToken");
 
@@ -321,8 +721,8 @@ async function handleChangePassword(
     return;
   }
 
-  if (passwordNew.length < 8) {
-    setPasswordError("Your new password must contain at least 8 characters.");
+  if (!meetsPasswordPolicy(passwordNew)) {
+    setPasswordError(PASSWORD_POLICY_MESSAGE);
     return;
   }
 
@@ -378,7 +778,12 @@ async function handleAdminBookingStatus(
 
   const action = status === "CONFIRMED" ? "confirm" : "cancel";
 
-  if (!window.confirm(`Are you sure you want to ${action} this reservation?`)) {
+  if (!(await confirm({
+    title: `${action[0].toUpperCase()}${action.slice(1)} reservation?`,
+    message: `Are you sure you want to ${action} this reservation?`,
+    confirmLabel: `${action[0].toUpperCase()}${action.slice(1)} reservation`,
+    destructive: status === "CANCELLED",
+  }))) {
     return;
   }
 
@@ -407,46 +812,38 @@ async function handleAdminBookingStatus(
   }
 }
 
-async function handleModifyAdminBooking(booking: AdminBooking) {
+function handleModifyAdminBooking(booking: AdminBooking) {
+  setModifyBookingForm({
+    checkIn: booking.checkIn.slice(0, 10),
+    checkOut: booking.checkOut.slice(0, 10),
+    adults: String(booking.adults),
+    children: String(booking.children),
+    roomQuantity: String(booking.roomQuantity),
+  });
+  setModifyBookingError("");
+  setBookingToModify(booking);
+}
+
+async function submitModifyAdminBooking(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+  if (!bookingToModify) return;
+
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
-    setAdminBookingsError("Please sign in again.");
+    setModifyBookingError("Please sign in again.");
     return;
   }
 
-  const checkIn = window.prompt(
-    "Check-in date (YYYY-MM-DD):",
-    booking.checkIn.slice(0, 10),
-  );
-  if (checkIn === null) return;
-
-  const checkOut = window.prompt(
-    "Check-out date (YYYY-MM-DD):",
-    booking.checkOut.slice(0, 10),
-  );
-  if (checkOut === null) return;
-
-  const adultsText = window.prompt("Number of adults:", String(booking.adults));
-  if (adultsText === null) return;
-
-  const childrenText = window.prompt(
-    "Number of children:",
-    String(booking.children),
-  );
-  if (childrenText === null) return;
-
-  const quantityText = window.prompt(
-    "Number of rooms:",
-    String(booking.roomQuantity),
-  );
-  if (quantityText === null) return;
-
-  const adults = Number(adultsText);
-  const children = Number(childrenText);
-  const roomQuantity = Number(quantityText);
+  const { checkIn, checkOut } = modifyBookingForm;
+  const adults = Number(modifyBookingForm.adults);
+  const children = Number(modifyBookingForm.children);
+  const roomQuantity = Number(modifyBookingForm.roomQuantity);
 
   if (
+    !checkIn ||
+    !checkOut ||
+    checkOut <= checkIn ||
     !Number.isInteger(adults) ||
     adults < 1 ||
     !Number.isInteger(children) ||
@@ -454,19 +851,24 @@ async function handleModifyAdminBooking(booking: AdminBooking) {
     !Number.isInteger(roomQuantity) ||
     roomQuantity < 1
   ) {
-    setAdminBookingsError(
-      "Enter valid whole numbers for guests and room quantity.",
-    );
+    setModifyBookingError("Enter valid dates and whole numbers for guests and room quantity.");
     return;
   }
 
-  setAdminActionBookingId(booking.id);
+  if (!(await confirm({
+    title: "Save reservation changes?",
+    message: `Update the dates, guest count, and room quantity for reservation ${bookingToModify.id}?`,
+    confirmLabel: "Save changes",
+  }))) return;
+
+  setAdminActionBookingId(bookingToModify.id);
   setAdminBookingsError("");
   setAdminBookingsMessage("");
+  setModifyBookingError("");
 
   try {
     await modifyAdminBooking(
-      booking.id,
+      bookingToModify.id,
       { checkIn, checkOut, adults, children, roomQuantity },
       token,
     );
@@ -474,6 +876,7 @@ async function handleModifyAdminBooking(booking: AdminBooking) {
     const bookings = await getAdminBookings(token);
     setAdminBookings(bookings);
     setAdminBookingsMessage("Reservation updated successfully.");
+    setBookingToModify(null);
   } catch (err) {
     setAdminBookingsError(
       err instanceof Error
@@ -492,21 +895,17 @@ async function handleLoadFavorites() {
   if (!token) {
     setAuthMode("login");
     setAuthError("Please sign in to view your favorites.");
-    document.getElementById("auth")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
     return;
   }
-setShowFavorites(true);
+  setGuestPage("favorites");
   setFavoritesLoading(true);
   setFavoritesError("");
   setFavoritesMessage("");
 
   try {
-    const saved = await getFavoriteHotels(token);
-    setFavoriteHotels(saved);
-    setFavoriteHotelIds(saved.map((favorite) => favorite.hotelId));
+    const saved = await getFavoriteBranches(token);
+    setFavoriteBranches(saved);
+    setFavoriteBranchIds(saved.map((favorite) => favorite.branchId));
   
   } catch (err) {
     setFavoritesError(
@@ -517,52 +916,47 @@ setShowFavorites(true);
   }
 }
 
-async function handleToggleFavorite(hotel: Hotel) {
+async function handleToggleFavorite(branch: Branch) {
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
     setAuthMode("login");
-    setAuthError("Please sign in to save hotels to your favorites.");
-    document.getElementById("auth")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    setAuthError("Please sign in to save branches to your favorites.");
     return;
   }
 
-  setFavoriteActionHotelId(hotel.id);
+  setFavoriteActionBranchId(branch.id);
   setFavoritesError("");
   setFavoritesMessage("");
 
   try {
-    const isFavorite = favoriteHotelIds.includes(hotel.id);
+    const isFavorite = favoriteBranchIds.includes(branch.id);
 
     if (isFavorite) {
-      await removeFavoriteHotel(hotel.id, token);
+      await removeFavoriteBranch(branch.id, token);
     } else {
-      await addFavoriteHotel(hotel.id, token);
+      await addFavoriteBranch(branch.id, token);
     }
 
-    const saved = await getFavoriteHotels(token);
+    const saved = await getFavoriteBranches(token);
 
-    setFavoriteHotels(saved);
-    setFavoriteHotelIds(saved.map((favorite) => favorite.hotelId));
+    setFavoriteBranches(saved);
+    setFavoriteBranchIds(saved.map((favorite) => favorite.branchId));
     setFavoritesMessage(
       isFavorite
-        ? "Hotel removed from favorites."
-        : "Hotel added to favorites.",
+        ? `${branch.name} removed from favorites.`
+        : `${branch.name} added to favorites.`,
     );
   } catch (err) {
     setFavoritesError(
       err instanceof Error ? err.message : "Failed to update favorites.",
     );
   } finally {
-    setFavoriteActionHotelId(null);
+    setFavoriteActionBranchId(null);
   }
 }
 
 async function handleLoadHotelReviews(hotelId: string) {
-  setReviewsOpen((previous) => ({ ...previous, [hotelId]: true }));
   setReviewsLoadingHotelId(hotelId);
   setReviewErrors((previous) => ({ ...previous, [hotelId]: "" }));
 
@@ -586,7 +980,7 @@ async function handleLoadHotelReviews(hotelId: string) {
 }
 
 async function handleShareHotel(hotel: Hotel) {
-  const url = `${window.location.origin}${window.location.pathname}#hotel-${hotel.id}`;
+  const url = `${window.location.origin}${window.location.pathname}#destinations`;
 
   const shareData = {
     title: hotel.name,
@@ -673,6 +1067,12 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   event.preventDefault();
   setAuthMessage("");
   setAuthError("");
+
+  if (authMode === "register" && !meetsPasswordPolicy(authPassword)) {
+    setAuthError(PASSWORD_POLICY_MESSAGE);
+    return;
+  }
+
   setAuthLoading(true);
 
   try {
@@ -703,8 +1103,10 @@ sessionStorage.setItem("hotelAuthToken", result.token);
 sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
 dispatch(setUser(result.user));
 
-      setAuthMessage(`Welcome${result.user.name ? `, ${result.user.name}` : ""}! You are signed in.`);
-      setAuthPassword("");
+setAuthMode(null);
+setAuthError("");
+setAuthMessage(`Welcome${result.user.name ? `, ${result.user.name}` : ""}! You are signed in.`);
+setAuthPassword("");
     }
   } catch (err) {
     setAuthError(
@@ -719,19 +1121,18 @@ dispatch(setUser(result.user));
 
 
 async function handleLoadMyBookings() {
-  setShowMyBookings(true);
-
   if (!authUser) {
-    dispatch(setBookingsError("Please sign in to view your bookings."));
+    setAuthMode("login");
+    setAuthError("Please sign in to view your bookings.");
     return;
   }
 
+  setGuestPage("bookings");
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
-    dispatch(
-      setBookingsError("Your session has expired. Please sign in again."),
-    );
+    setAuthMode("login");
+    setAuthError("Your session has expired. Please sign in again.");
     return;
   }
 
@@ -754,11 +1155,66 @@ async function handleLoadMyBookings() {
   }
 }
 
+useEffect(() => {
+  if (!authUser?.id || restoredAccountDataLoaded.current) return;
+  restoredAccountDataLoaded.current = true;
+
+  const token = sessionStorage.getItem("hotelAuthToken");
+  if (!token) return;
+
+  if (restoredNavigation.guestPage === "bookings") {
+    dispatch(setBookingsLoading(true));
+    dispatch(setBookingsError(""));
+    void getUserBookings(authUser.id, token)
+      .then((bookings) => dispatch(setBookings(bookings)))
+      .catch((error: unknown) =>
+        dispatch(
+          setBookingsError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load your bookings.",
+          ),
+        ),
+      )
+      .finally(() => dispatch(setBookingsLoading(false)));
+  } else if (
+    restoredNavigation.guestPage === "profile" ||
+    (restoredNavigation.adminPortalOpen &&
+      restoredNavigation.adminPage === "profile")
+  ) {
+    setProfileLoading(true);
+    setProfileError("");
+    void getMyProfile(token)
+      .then((result) => {
+        setProfile(result);
+        setProfileName(result.name ?? "");
+        setProfileTitle(result.title ?? "");
+      })
+      .catch((error: unknown) =>
+        setProfileError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load your profile.",
+        ),
+      )
+      .finally(() => setProfileLoading(false));
+  }
+}, [
+  authUser?.id,
+  dispatch,
+  restoredNavigation.adminPage,
+  restoredNavigation.adminPortalOpen,
+  restoredNavigation.guestPage,
+]);
+
 
 async function handleCancelBooking(bookingId: string) {
-  const confirmed = window.confirm(
-    "Are you sure you want to cancel this booking?",
-  );
+  const confirmed = await confirm({
+    title: "Cancel booking?",
+    message: "Are you sure you want to cancel this booking?",
+    confirmLabel: "Cancel booking",
+    destructive: true,
+  });
 
   if (!confirmed) return;
 
@@ -801,20 +1257,30 @@ if (outcome.bookingStatus === "CANCELLED") {
 }
 
 
-function handleSignOut() {
+async function handleSignOut() {
+  const confirmed = await confirm({
+    title: "Sign out?",
+    message: "Are you sure you want to sign out of your account?",
+    confirmLabel: "Sign out",
+    destructive: true,
+  });
+  if (!confirmed) return;
+
   sessionStorage.removeItem("hotelAuthToken");
   sessionStorage.removeItem("hotelAuthUser");
+  sessionStorage.removeItem("hotelAppNavigation");
 
 dispatch(clearUser());
-setShowAdminUsers(false);
-setShowAdminAccommodation(false);
-setShowAdminBookings(false);
+setAdminPortalOpen(false);
   setAuthMode(null);
   setAuthMessage("");
   setAuthError("");
   setAuthPassword("");
   setAuthConfirmPassword("");
   dispatch(clearBookings());
+  setFavoriteBranches([]);
+  setFavoriteBranchIds([]);
+  setGuestPage("discover");
 }
 
 async function handleBookingSubmit(
@@ -972,60 +1438,96 @@ useEffect(() => {
     );
   }
 }, [dispatch]);
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/hotels`);
-        if (!response.ok) throw new Error("Failed to load hotels");
+  const loadAccommodationData = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
-        const result = await response.json();
-        const hotelList: Hotel[] = result.data ?? [];
-        setHotels(hotelList);
+    try {
+      const response = await fetch(`${API_BASE_URL}/hotels`);
+      if (!response.ok) throw new Error("Failed to load hotels");
 
-        const branchResults = await Promise.all(
-          hotelList.map(async (hotel) => {
-            const branchResponse = await fetch(
-              `${API_BASE_URL}/branches/hotel/${hotel.id}`,
-            );
-            if (!branchResponse.ok) throw new Error("Failed to load branches");
+      const result = await response.json();
+      const hotelList: Hotel[] = result.data ?? [];
+      setHotels(hotelList);
 
-            const branchResult = await branchResponse.json();
-            return [hotel.id, branchResult.data ?? []] as const;
-          }),
-        );
+      const branchResults = await Promise.all(
+        hotelList.map(async (hotel) => {
+          const branchResponse = await fetch(
+            `${API_BASE_URL}/branches/hotel/${hotel.id}`,
+          );
+          if (!branchResponse.ok) throw new Error("Failed to load branches");
 
-        const branchMap = Object.fromEntries(branchResults) as Record<
-          string,
-          Branch[]
-        >;
-        setBranches(branchMap);
+          const branchResult = await branchResponse.json();
+          return [hotel.id, branchResult.data ?? []] as const;
+        }),
+      );
 
-        const allBranches = Object.values(branchMap).flat();
+      const branchMap = Object.fromEntries(branchResults) as Record<
+        string,
+        Branch[]
+      >;
+      setBranches(branchMap);
 
-        const roomResults = await Promise.all(
-          allBranches.map(async (branch) => {
-            const roomResponse = await fetch(
-              `${API_BASE_URL}/rooms/branch/${branch.id}`,
-            );
-            if (!roomResponse.ok) throw new Error("Failed to load rooms");
+      const loadedBranches = Object.values(branchMap).flat();
 
-            const roomResult = await roomResponse.json();
-            return [branch.id, roomResult.data ?? []] as const;
-          }),
-        );
+      const roomResults = await Promise.all(
+        loadedBranches.map(async (branch) => {
+          const roomResponse = await fetch(
+            `${API_BASE_URL}/rooms/branch/${branch.id}`,
+          );
+          if (!roomResponse.ok) throw new Error("Failed to load rooms");
 
-        setRooms(Object.fromEntries(roomResults));
-      } catch {
-        setError("We couldn't load our stays. Please refresh and try again.");
-      } finally {
-        setLoading(false);
-      }
+          const roomResult = await roomResponse.json();
+          return [branch.id, roomResult.data ?? []] as const;
+        }),
+      );
+
+      setRooms(Object.fromEntries(roomResults));
+    } catch (loadError) {
+      console.error("Failed to load accommodation:", loadError);
+      setError("We couldn't load our stays. Please refresh and try again.");
+    } finally {
+      setLoading(false);
     }
-
-    void loadData();
   }, []);
 
+  useEffect(() => {
+    void loadAccommodationData();
+  }, [loadAccommodationData]);
+
   const allBranches = Object.values(branches).flat();
+
+  useEffect(() => {
+    if (
+      guestPage !== "stay" ||
+      selectedStay ||
+      !restoredNavigation.selectedHotelId ||
+      !restoredNavigation.selectedBranchId
+    ) {
+      return;
+    }
+
+    const hotel = hotels.find(
+      (item) => item.id === restoredNavigation.selectedHotelId,
+    );
+    const branch = allBranches.find(
+      (item) => item.id === restoredNavigation.selectedBranchId,
+    );
+
+    if (hotel && branch) {
+      setSelectedStay({ hotel, branch });
+    } else if (!loading) {
+      setGuestPage("discover");
+    }
+  }, [
+    allBranches,
+    guestPage,
+    hotels,
+    loading,
+    restoredNavigation.selectedBranchId,
+    restoredNavigation.selectedHotelId,
+    selectedStay,
+  ]);
   
 
 useEffect(() => {
@@ -1260,10 +1762,6 @@ useEffect(() => {
     ),
   ).values(),
 ).sort((a, b) => a.name.localeCompare(b.name));
-  const lowestPrice = allRooms.length
-    ? Math.min(...allRooms.map((room) => room.pricePerNight))
-    : null;
-
 const filteredHotels = hotels.filter((hotel) => {
   const hotelBranches = branches[hotel.id] ?? [];
   const search = hotelSearch.trim().toLowerCase();
@@ -1291,6 +1789,7 @@ const filteredHotels = hotels.filter((hotel) => {
 
   const matchesLocation =
     !location ||
+    hotel.name.toLowerCase().includes(location) ||
     hotelBranches.some((branch) =>
       [branch.name, branch.address, branch.city, branch.country].some(
         (value) => value.toLowerCase().includes(location),
@@ -1320,1803 +1819,363 @@ const prices = hotelBranches
   return matchesSearch && matchesLocation && matchesPrice;
 });
 
-  return (
-    <div className="site-shell">
-      <header className="site-header">
-        <a className="brand" href="#home" aria-label="The Grand Aurelia home">
-          <span className="brand-mark">A</span>
-          <span className="brand-copy">
-            <strong>THE GRAND AURELIA</strong>
-            <small>A STAY BEYOND EXPECTATIONS</small>
-          </span>
-        </a>
+  function toggleAdminPortal() {
+    if (authUser?.role !== "ADMIN") return;
 
-        <nav className="main-nav" aria-label="Main navigation">
-          <a className="nav-active" href="#home">Home</a>
-          <a href="#destinations">Destinations</a>
-          <a href="#rooms">Our Rooms</a>
-          <a href="#about">Our Story</a>
-        </nav>
+    const shouldOpen = !adminPortalOpen;
+    setAdminPortalOpen(shouldOpen);
+    if (shouldOpen) void handleLoadAdminBookings();
+  }
 
+  function navigateAdmin(page: AdminPage) {
+    setAdminPage(page);
+    if (page === "bookings" || page === "dashboard") {
+      void handleLoadAdminBookings();
+    }
+  }
 
-<div className="header-actions">
- 
-{authUser ? (
-  <>
-    <span className="login-link">
-      Welcome, {authUser.name || authUser.email}
-    </span>
-<button
-  type="button"
-  className="login-link sign-out-button"
-  disabled={profileLoading}
-  onClick={async () => {
-    if (showProfile) {
-      setShowProfile(false);
+  function openAdminProfile() {
+    setAdminPage("profile");
+    setProfileError("");
+    setProfileMessage("");
+    void handleLoadProfile();
+  }
+
+  function navigateGuestPage(page: GuestPage) {
+    if (
+      ["favorites", "bookings", "profile"].includes(page) &&
+      !authUser
+    ) {
+      setAuthMode("login");
+      setAuthError("Please sign in to view your account.");
       return;
     }
 
-    setShowProfile(true);
-    await handleLoadProfile();
-
+    setGuestPage(page);
     window.requestAnimationFrame(() => {
-      document.getElementById("my-profile")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
-  }}
->
-  {profileLoading ? "Loading profile..." : "My Profile"}
-</button>
-    <button
-      type="button"
-      className="login-link sign-out-button"
-      onClick={async () => {
-        await handleLoadMyBookings();
-
-        document.getElementById("my-bookings")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }}
-      disabled={myBookingsLoading}
-    >
-      {myBookingsLoading ? "Loading bookings..." : "My Bookings"}
-    </button>
-
-
-<button
-  type="button"
-  className="login-link sign-out-button"
-  onClick={async () => {
-    if (showFavorites) {
-      setShowFavorites(false);
-    } else {
-      await handleLoadFavorites();
-
-      window.requestAnimationFrame(() => {
-        document.getElementById("favorite-hotels")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      });
-    }
-  }}
-  disabled={favoritesLoading}
->
-  {favoritesLoading
-    ? "Loading Favourites..."
-    : showFavorites
-      ? "Hide Favourites"
-      : "My Favourites"}
-</button>
-
-    {/* ADD THE ADMIN BUTTON HERE */}
-    {authUser.role === "ADMIN" && (
-      <button
-        type="button"
-        className="login-link sign-out-button"
-        onClick={async () => {
-          if (showAdminBookings) {
-            setShowAdminBookings(false);
-          } else {
-            await handleLoadAdminBookings();
-          }
-        }}
-        disabled={adminBookingsLoading}
-      >
-        {adminBookingsLoading
-          ? "Loading reservations..."
-          : showAdminBookings
-            ? "Hide Admin Reservations"
-            : "Admin Reservations"}
-      </button>
-      
-    )}
-    {authUser.role === "ADMIN" && (
-  // Keep your existing Manage Accommodation button here, unchanged.
-
-<button
-  type="button"
-  className="login-link sign-out-button"
-  onClick={() => {
-    const nextState = !showAdminAccommodation;
-    setShowAdminAccommodation(nextState);
-
-    if (nextState) {
-      window.requestAnimationFrame(() => {
-        document
-          .getElementById("admin-accommodation")
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-      });
-    }
-  }}
->
-  {showAdminAccommodation
-    ? "Hide Accommodation Management"
-    : "Manage Accommodation"}
-</button>)}
-{authUser.role === "ADMIN" && (
-  <button
-    type="button"
-    className="login-link sign-out-button"
-    onClick={() => {
-      const nextState = !showAdminUsers;
-      setShowAdminUsers(nextState);
-
-      if (nextState) {
-        window.requestAnimationFrame(() => {
-          document.getElementById("admin-users")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-        });
-      }
-    }}
-  >
-    {showAdminUsers ? "Hide User Management" : "Manage Users"}
-  </button>
-)}
-    <button
-      type="button"
-      className="login-link sign-out-button"
-      onClick={handleSignOut}
-    >
-      Sign out
-    </button>
-  </>
-) : (
-  <a
-    className="login-link"
-    href="#auth"
-    onClick={(event) => {
-      event.preventDefault();
-      setAuthMode("login");
-    }}
-  >
-    Sign in
-  </a>
-)}
-
-  <a className="header-cta" href="#rooms">
-    Explore Stays <span>↗</span>
-  </a>
-</div>
-
-
-      </header>
-{authUser?.role === "ADMIN" && showAdminAccommodation && (
-  <AdminAccommodation />
-)}
-{authUser?.role === "ADMIN" && showAdminUsers && authUser && (
-  <AdminUsers currentUserId={authUser.id} />
-)}
-      <main>
-        
-{authMode !== null && (
-  <section className="auth-section" id="auth">
-    <div className="auth-card">
-      <button
-        type="button"
-        className="auth-close"
-        onClick={() => {
-          setAuthMode(null);
-          setAuthMessage("");
-          setAuthError("");
-        }}
-        aria-label="Close authentication form"
-      >
-        ×
-      </button>
-
-      <p className="eyebrow">
-        <span /> THE GRAND AURELIA
-      </p>
-
-      <h2>
-        {authMode === "login" ? (
-          <>Welcome <em>back.</em></>
-        ) : (
-          <>Create your <em>account.</em></>
-        )}
-      </h2>
-
-      <p className="auth-description">
-        {authMode === "login"
-          ? "Sign in to continue your journey with us."
-          : "Join us and make your next stay special."}
-      </p>
-
-      <form onSubmit={handleAuthSubmit}>
-  
-{authMode === "register" && (
-  <>
-    <label className="auth-label">
-      Title
-      <select
-        value={authTitle}
-        onChange={(event) => setAuthTitle(event.target.value)}
-        required
-      >
-        <option value="">Select your title</option>
-        <option value="Mr">Mr</option>
-        <option value="Mrs">Mrs</option>
-        <option value="Ms">Ms</option>
-        <option value="Miss">Miss</option>
-        <option value="Dr">Dr</option>
-        <option value="Prof">Prof</option>
-      </select>
-    </label>
-
-    <label className="auth-label">
-      Full name
-      <input
-        type="text"
-        value={authName}
-        onChange={(event) => setAuthName(event.target.value)}
-        autoComplete="name"
-        placeholder="Your full name"
-        maxLength={100}
-        required
-      />
-    </label>
-  </>
-)}
-
-
-        <label className="auth-label">
-          Email address
-          <input
-            type="email"
-            value={authEmail}
-            onChange={(event) => setAuthEmail(event.target.value)}
-            autoComplete="email"
-            placeholder="you@example.com"
-            required
-          />
-        </label>
-
-        <label className="auth-label">
-          Password
-          <input
-            type="password"
-            value={authPassword}
-            onChange={(event) => setAuthPassword(event.target.value)}
-            autoComplete={authMode === "login" ? "current-password" : "new-password"}
-            placeholder={authMode === "register" ? "At least 8 characters" : "Your password"}
-            minLength={authMode === "register" ? 8 : undefined}
-            required
-          />
-        </label>
-
-{authMode === "register" && (
-  <label className="auth-label">
-    Confirm password
-    <input
-      type="password"
-      value={authConfirmPassword}
-      onChange={(event) => setAuthConfirmPassword(event.target.value)}
-      autoComplete="new-password"
-      placeholder="Enter your password again"
-      minLength={8}
-      required
-    />
-  </label>
-)}
-
-        {authError && (
-          <p className="auth-feedback auth-feedback-error" role="alert">
-            {authError}
-          </p>
-        )}
-
-        {authMessage && (
-          <p className="auth-feedback auth-feedback-success" role="status">
-            {authMessage}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          className="gold-button auth-submit"
-          disabled={authLoading}
-        >
-          {authLoading
-            ? "Please wait..."
-            : authMode === "login"
-              ? "Sign in"
-              : "Create account"}
-          {!authLoading && <span>→</span>}
-        </button>
-      </form>
-
-      <p className="auth-switch">
-            <div className="google-auth-divider">
-        <span>or</span>
-      </div>
-
-      <a
-        className="google-signin-button"
-        href={`${API_BASE_URL}/auth/google`}
-        aria-label="Continue with Google"
-      >
-        <span className="google-signin-mark" aria-hidden="true">
-          G
-        </span>
-        <span>Continue with Google</span>
-      </a>
-        {authMode === "login"
-          ? "New to The Grand Aurelia?"
-          : "Already have an account?"}{" "}
-        <button
-          type="button"
-          onClick={() => {
-            setAuthMode(authMode === "login" ? "register" : "login");
-            setAuthMessage("");
-            setAuthError("");
-            setAuthConfirmPassword("");
-          }}
-        >
-          {authMode === "login" ? "Create account" : "Sign in"}
-        </button>
-      </p>
-    </div>
-  </section>
-)}
-<section className="hero" id="home">
-  <div
-    className="hero-image"
-    role="img"
-    aria-label="Peaceful luxury lodge surrounded by nature"
-  />
-  <div className="hero-shade" />
-
-  <div className="hero-content">
-    <p className="eyebrow hero-eyebrow">
-      <span /> THE GRAND AURELIA · SOUTH AFRICA
-    </p>
-
-    <h1>
-      Discover a place<br />
-      to <em>belong.</em>
-    </h1>
-
-    <p className="hero-description">
-      Thoughtfully designed stays, genuine hospitality,
-      and beautiful places to make your own.
-    </p>
-
-    <a className="gold-button" href="#destinations">
-      Explore our destinations <span>→</span>
-    </a>
-  </div>
-
-  <div className="hero-caption">
-    <span className="caption-line" />
-    <span>THE GRAND AURELIA · SOUTH AFRICA</span>
-  </div>
-
-  <div className="hero-index">
-    <strong>01</strong> / THE ART OF STAYING
-  </div>
-</section>
-
-<section className="search-section" aria-label="Explore accommodation">
-  <div className="search-intro">
-    <span className="search-icon">⌕</span>
-    <div>
-      <strong>Find your stay</strong>
-      <span>Your next escape begins here</span>
-    </div>
-  </div>
-
-  <a className="search-field" href="#destinations">
-    <span className="field-label">OUR DESTINATIONS</span>
-    <strong>Explore our locations</strong>
-  </a>
-
-  <a className="search-field" href="#rooms">
-    <span className="field-label">ACCOMMODATION</span>
-    <strong>Discover available rooms</strong>
-  </a>
-
-  <a className="search-button" href="#destinations">
-    Discover stays <span>→</span>
-  </a>
-</section>
-        <section className="welcome-section" id="about">
-          <div className="welcome-copy">
-            <p className="eyebrow"><span /> WELCOME TO THE GRAND AURELIA</p>
-            <h2>A little more than<br />a place to <em>stay.</em></h2>
-          </div>
-          <div className="welcome-description">
-            <p>
-              Some places simply make you feel different. At The Grand Aurelia,
-              we believe a memorable stay is made from the little things:
-              considered spaces, genuine hospitality, and room to breathe.
-            </p>
-            <a className="text-link" href="#destinations">
-              Get to know us <span>↗</span>
-            </a>
-          </div>
-          <div className="welcome-number">01 <span>— OUR PHILOSOPHY</span></div>
-        </section>
-
-        <section className="destinations-section" id="destinations">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow"><span /> FIND YOUR PLACE</p>
-              <h2>Our <em>destinations.</em></h2>
-            </div>
-            <p className="section-note">
-              A welcoming place to return to,<br />wherever your journey takes you.
-            </p>
-          </div>
-
-          {loading && <p className="status-message">Discovering our stays...</p>}
-          {error && <p className="status-message error-message" role="alert">{error}</p>}
-
-          {!loading && !error && hotels.length === 0 && (
-            <p className="status-message">Our stays are coming soon.</p>
-          )}
-{favoritesError && (
-  <p className="status-message error-message" role="alert">
-    Favourites error: {favoritesError}
-  </p>
-)}
-
-{favoritesMessage && (
-  <p className="status-message" role="status">
-    {favoritesMessage}
-  </p>
-)}
-
-<div className="hotel-search-filters">
-  <label>
-    Search accommodations
-    <input
-      type="search"
-      value={hotelSearch}
-      onChange={(event) => setHotelSearch(event.target.value)}
-      placeholder="Hotel name, room type, or description"
-    />
-  </label>
-
-  <label>
-    Location
-    <input
-      type="search"
-      value={locationSearch}
-      onChange={(event) => setLocationSearch(event.target.value)}
-      placeholder="City, address, or branch"
-    />
-  </label>
-
-  <label>
-    Minimum price per night (R)
-    <input
-      type="number"
-      min="0"
-      value={minNightlyPrice}
-      onChange={(event) => setMinNightlyPrice(event.target.value)}
-      placeholder="No minimum"
-    />
-  </label>
-
-  <label>
-    Maximum price per night (R)
-    <input
-      type="number"
-      min="0"
-      value={maxNightlyPrice}
-      onChange={(event) => setMaxNightlyPrice(event.target.value)}
-      placeholder="No maximum"
-    />
-  </label>
-
-  <button
-    type="button"
-    className="login-link sign-out-button"
-    onClick={() => {
-      setHotelSearch("");
-      setLocationSearch("");
-      setMinNightlyPrice("");
-      setMaxNightlyPrice("");
-    }}
-  >
-    Clear filters
-  </button>
-</div>
-
-<p className="status-message" role="status">
-  Showing {filteredHotels.length} of {hotels.length} accommodations
-</p>
-
-{hotels.length > 0 && filteredHotels.length === 0 && (
-  <p className="status-message">
-    No accommodations match your search. Try changing your filters.
-  </p>
-)}
-
-          <div className="destination-grid">
-            {filteredHotels.map((hotel) => (
-              <article className="destination-card" key={hotel.id} id={`hotel-${hotel.id}`}>
-              
-<div className="destination-photo">
-  {hotel.images && hotel.images.length > 0 && (
-    <img
-      className="destination-photo-image"
-      src={
-        hotel.images[
-          galleryIndexes[hotel.id] ?? 0
-        ].url
-      }
-      alt={
-        hotel.images[
-          galleryIndexes[hotel.id] ?? 0
-        ].altText || `${hotel.name} accommodation`
-      }
-      onError={(event) => {
-        event.currentTarget.style.display = "none";
-      }}
-    />
-  )}
-
-  <div className="photo-overlay" />
-
-  {hotel.images && hotel.images.length > 1 && (
-    <div className="gallery-controls">
-      <button
-        type="button"
-        aria-label={`Previous photo of ${hotel.name}`}
-        onClick={() =>
-          setGalleryIndexes((previous) => ({
-            ...previous,
-            [hotel.id]:
-              ((previous[hotel.id] ?? 0) -
-                1 +
-                hotel.images!.length) %
-              hotel.images!.length,
-          }))
-        }
-      >
-        ‹
-      </button>
-
-      <span>
-        {(galleryIndexes[hotel.id] ?? 0) + 1} / {hotel.images.length}
-      </span>
-
-      <button
-        type="button"
-        aria-label={`Next photo of ${hotel.name}`}
-        onClick={() =>
-          setGalleryIndexes((previous) => ({
-            ...previous,
-            [hotel.id]:
-              ((previous[hotel.id] ?? 0) + 1) %
-              hotel.images!.length,
-          }))
-        }
-      >
-        ›
-      </button>
-    </div>
-  )}
-
-  <span className="photo-tag">OUR SIGNATURE STAY</span>
-
-          
-                  <span className="photo-count">
-                    {(branches[hotel.id] ?? []).length} {(branches[hotel.id] ?? []).length === 1 ? "location" : "locations"}
-                  </span>
-                </div>
-                <div className="destination-content">
-                  <p className="eyebrow destination-eyebrow">SOUTH AFRICA · MPUMALANGA</p>
-                  <h3>{hotel.name}</h3>
-
-<button
-  type="button"
-  className="login-link sign-out-button"
-  onClick={() => void handleShareHotel(hotel)}
-  aria-label={`Share ${hotel.name}`}
->
-  Share Hotel ↗
-</button>
-
-<button
-  type="button"
-  className="login-link sign-out-button"
-  aria-pressed={favoriteHotelIds.includes(hotel.id)}
-  onClick={() => handleToggleFavorite(hotel)}
-  disabled={favoriteActionHotelId === hotel.id}
->
-  {favoriteActionHotelId === hotel.id
-    ? "Saving..."
-    : favoriteHotelIds.includes(hotel.id)
-      ? "♥ Saved to Favourites"
-      : "♡ Add to Favourites"}
-</button>
-
-                  <p className="destination-description">
-                    {hotel.description || "A thoughtful stay, designed around you."}
-                  </p>
-
-<div className="hotel-reviews">
-  <button
-    type="button"
-    className="login-link sign-out-button"
-    onClick={() => {
-      if (reviewsOpen[hotel.id]) {
-        setReviewsOpen((previous) => ({
-          ...previous,
-          [hotel.id]: false,
-        }));
-      } else {
-        void handleLoadHotelReviews(hotel.id);
-      }
-    }}
-    disabled={reviewsLoadingHotelId === hotel.id}
-  >
-    {reviewsLoadingHotelId === hotel.id
-      ? "Loading reviews..."
-      : reviewsOpen[hotel.id]
-        ? "Hide Reviews"
-        : "Reviews & Ratings"}
-  </button>
-
-  {hotelReviews[hotel.id] && (
-    <p>
-      <strong>
-        {hotelReviews[hotel.id].averageRating === null
-          ? "Not rated yet"
-          : `${hotelReviews[hotel.id].averageRating!.toFixed(1)} / 5 ★`}
-      </strong>
-      {" "}({hotelReviews[hotel.id].count} reviews)
-    </p>
-  )}
-
-  {reviewsOpen[hotel.id] && (
-    <div className="hotel-reviews-panel">
-      {reviewErrors[hotel.id] && (
-        <p role="alert">{reviewErrors[hotel.id]}</p>
-      )}
-
-      {reviewMessages[hotel.id] && (
-        <p role="status">{reviewMessages[hotel.id]}</p>
-      )}
-
-      {hotelReviews[hotel.id]?.data.map((review) => (
-        <article key={review.id} className="hotel-review-card">
-          <p>
-            <strong>{review.user.name || "Guest"}</strong>
-            {" · "}
-            {"★".repeat(review.rating)}
-            {"☆".repeat(5 - review.rating)}
-          </p>
-
-          {review.comment && <p>{review.comment}</p>}
-
-          <small>
-            {new Date(review.createdAt).toLocaleDateString("en-ZA")}
-          </small>
-        </article>
-      ))}
-
-      {hotelReviews[hotel.id]?.count === 0 && (
-        <p>No reviews yet. Be the first to share your experience.</p>
-      )}
-
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void handleSubmitHotelReview(hotel.id);
-        }}
-      >
-        <label>
-          Your rating
-          <select
-            value={reviewRatings[hotel.id] ?? 5}
-            onChange={(event) =>
-              setReviewRatings((previous) => ({
-                ...previous,
-                [hotel.id]: Number(event.target.value),
-              }))
-            }
-          >
-            <option value={5}>5 - Excellent</option>
-            <option value={4}>4 - Very good</option>
-            <option value={3}>3 - Good</option>
-            <option value={2}>2 - Fair</option>
-            <option value={1}>1 - Poor</option>
-          </select>
-        </label>
-
-        <label>
-          Your review
-          <textarea
-            rows={3}
-            maxLength={2000}
-            value={reviewComments[hotel.id] ?? ""}
-            onChange={(event) =>
-              setReviewComments((previous) => ({
-                ...previous,
-                [hotel.id]: event.target.value,
-              }))
-            }
-            placeholder="Share your experience..."
-          />
-        </label>
-
-        <button
-          type="submit"
-          className="room-book-button"
-          disabled={reviewSubmittingHotelId === hotel.id}
-        >
-          {reviewSubmittingHotelId === hotel.id
-            ? "Submitting..."
-            : "Submit Review"}
-        </button>
-      </form>
-    </div>
-  )}
-</div>
-
-                  {(branches[hotel.id] ?? []).map((branch) => (
-                    <div className="branch-details" key={branch.id}>
-                      <div className="branch-title-row">
-                        <span className="location-dot" />
-                        <strong>{branch.name}</strong>
-                      </div>
-                      {getBranchPhotos(branch).length > 0 && (
-  <div className="branch-photo-gallery">
-  <img
-  className="branch-photo-image"
-  src={getBranchPhotoUrl(
-    getBranchPhotos(branch)[
-      (galleryIndexes[`branch-${branch.id}`] ?? 0) %
-        getBranchPhotos(branch).length
-    ],
-  )}
-  alt={`${branch.name} accommodation`}
-  loading="lazy"
-  role="button"
-  tabIndex={0}
-  aria-label={`Enlarge photo of ${branch.name}`}
-  onClick={() =>
-    setActiveBranchPhoto({
-      branchName: branch.name,
-      photos: getBranchPhotos(branch),
-      index:
-        (galleryIndexes[`branch-${branch.id}`] ?? 0) %
-        getBranchPhotos(branch).length,
-    })
   }
-  onKeyDown={(event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setActiveBranchPhoto({
-        branchName: branch.name,
-        photos: getBranchPhotos(branch),
-        index:
-          (galleryIndexes[`branch-${branch.id}`] ?? 0) %
-          getBranchPhotos(branch).length,
-      });
-    }
-  }}
-/>
 
-    {getBranchPhotos(branch).length > 1 && (
-      <div className="branch-gallery-controls">
-        <button
-          type="button"
-          aria-label={`Previous photo of ${branch.name}`}
-          onClick={() =>
-            setGalleryIndexes((current) => ({
-              ...current,
-              [`branch-${branch.id}`]:
-                ((current[`branch-${branch.id}`] ?? 0) -
-                  1 +
-                  getBranchPhotos(branch).length) %
-                getBranchPhotos(branch).length,
-            }))
-          }
-        >
-          ‹
-        </button>
+  function handleViewStay(hotel: Hotel, branch: Branch) {
+    setSelectedStay({ hotel, branch });
+    setGuestPage("stay");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
-        <span>
-          {((galleryIndexes[`branch-${branch.id}`] ?? 0) %
-            getBranchPhotos(branch).length) + 1}
-          {" / "}
-          {getBranchPhotos(branch).length}
-        </span>
-
-        <button
-          type="button"
-          aria-label={`Next photo of ${branch.name}`}
-          onClick={() =>
-            setGalleryIndexes((current) => ({
-              ...current,
-              [`branch-${branch.id}`]:
-                ((current[`branch-${branch.id}`] ?? 0) + 1) %
-                getBranchPhotos(branch).length,
-            }))
-          }
-        >
-          ›
-        </button>
-      </div>
-    )}
-  </div>
-)}
-                     
-<p>
-  {branch.address}, {branch.city}, {branch.country}
-</p>
-
-<a
-  className="text-link"
-  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    `${branch.address}, ${branch.city}, ${branch.country}`,
-  )}`}
-  target="_blank"
-  rel="noopener noreferrer"
->
-  View on Map ↗
-</a>
-
-
-                      
-{(branch.checkInTime ||
-  branch.checkOutTime ||
-  branch.cancellationPolicy) && (
-  <div className="branch-policies">
-    {branch.checkInTime && (
-      <p>
-        <strong>Check-in:</strong> {branch.checkInTime}
-      </p>
-    )}
-
-    {branch.checkOutTime && (
-      <p>
-        <strong>Check-out:</strong> {branch.checkOutTime}
-      </p>
-    )}
-
-    {branch.cancellationPolicy && (
-      <p>
-        <strong>Cancellation policy:</strong>{" "}
-        {branch.cancellationPolicy}
-      </p>
-    )}
-  </div>
-)}
-
-                      
-{branch.amenities && branch.amenities.length > 0 && (
-  <div className="branch-amenities">
-    <strong>Facilities & Amenities</strong>
-    <div className="amenity-list">
-      {branch.amenities.map(({ amenity }) => (
-        <span key={amenity.id} className="amenity-tag">
-          {amenity.name}
-        </span>
-      ))}
-    </div>
-  </div>
-)}
-
-                      <a className="text-link" href="#rooms">
-                        Explore this location <span>→</span>
-                      </a>
-                    </div>
-                  ))}
-
-                  <div className="destination-footer">
-                    <div>
-                      <span className="field-label">ROOMS FROM</span>
-                      <strong className="starting-price">
-                        {lowestPrice === null
-                          ? "Enquire for rates"
-                          : `R${lowestPrice.toLocaleString("en-ZA")}`}
-                      </strong>
-                      {lowestPrice !== null && <span className="per-night">per room / night</span>}
-                    </div>
-                    <a className="round-link" href="#rooms" aria-label={`Explore ${hotel.name} rooms`}>↗</a>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-{authUser && showFavorites && (
-  <section
-    id="favorite-hotels"
-    className="my-bookings-section"
-  >
-    <h2>My Favourites</h2>
-    <p>Your saved stays at The Grand Aurelia.</p>
-
-    {favoritesError && (
-      <p role="alert">{favoritesError}</p>
-    )}
-
-    {favoritesMessage && (
-      <p role="status">{favoritesMessage}</p>
-    )}
-
-    {favoritesLoading && <p>Loading Favourites...</p>}
-
-    {!favoritesLoading &&
-      !favoritesError &&
-      favoriteHotels.length === 0 && (
-        <p>You haven't saved any hotels yet.</p>
-      )}
-
-    {!favoritesLoading &&
-      favoriteHotels.map((favorite) => (
-        <article
-          key={favorite.hotelId}
-          className="my-booking-card"
-        >
-          <h3>{favorite.hotel.name}</h3>
-
-          <p>
-            {favorite.hotel.description ||
-              "A thoughtful stay, designed around you."}
-          </p>
-
-          <button
-            type="button"
-            className="login-link sign-out-button"
-            disabled={favoriteActionHotelId === favorite.hotelId}
-            onClick={() =>
-              handleToggleFavorite({
-                id: favorite.hotel.id,
-                name: favorite.hotel.name,
-                description: favorite.hotel.description,
-              })
-            }
-          >
-            {favoriteActionHotelId === favorite.hotelId
-              ? "Removing..."
-              : "Remove from Favourites"}
-          </button>
-        </article>
-      ))}
-  </section>
-)}
-
-        <section className="rooms-section" id="rooms">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow"><span /> REST EASY</p>
-              <h2>Spaces to call <em>your own.</em></h2>
-            </div>
-            <p className="section-note">
-              Thoughtful comfort for quiet mornings<br />and well-earned rest.
-            </p>
-          </div>
-
-          {!loading && allBranches.length === 0 && !error && (
-            <p className="status-message">Room details will appear here soon.</p>
-          )}
-{availableRoomAmenities.length > 0 && (
-  <div className="branch-amenities room-amenity-filters">
-    <strong>Filter rooms by amenities</strong>
-
-    <div className="amenity-list">
-      {availableRoomAmenities.map((amenity) => (
-        <label key={amenity.id} className="amenity-tag">
-          <input
-            type="checkbox"
-            checked={selectedRoomAmenityIds.includes(amenity.id)}
-            onChange={(event) => {
-              setSelectedRoomAmenityIds((previous) =>
-                event.target.checked
-                  ? [...previous, amenity.id]
-                  : previous.filter((id) => id !== amenity.id),
-              );
-            }}
-          />
-          {amenity.name}
-        </label>
-      ))}
-    </div>
-
-    {selectedRoomAmenityIds.length > 0 && (
-      <button
-        type="button"
-        className="login-link sign-out-button"
-        onClick={() => setSelectedRoomAmenityIds([])}
-      >
-        Clear amenity filters
-      </button>
-    )}
-  </div>
-)}
-          <div className="room-grid">
-           {allBranches.flatMap((branch) =>
-  (rooms[branch.id] ?? [])
-    .filter((room) =>
-      selectedRoomAmenityIds.every((amenityId) =>
-        room.amenities?.some(
-          (item) => item.amenityId === amenityId,
-        ),
-      ),
-    )
-    .map((room) => (
-                <article className="room-card" key={room.id}>
-                  <div className="room-photo">
-                    <div className="room-photo-overlay" />
-                    <span className="room-category">THE GRAND AURELIA</span>
-                  </div>
-                  <div className="room-card-body">
-                    <div className="room-title-row">
-                      <h3>{room.name}</h3>
-                      <span className="room-capacity">♧ {room.capacity} guests</span>
-                    </div>
-                    <p>{room.description || "A welcoming room for a comfortable stay."}</p>
-                    {room.amenities && room.amenities.length > 0 && (
-  <div className="branch-amenities room-card-amenities">
-    <strong>Room amenities</strong>
-
-    <div className="amenity-list">
-      {room.amenities.map(({ amenity }) => (
-        <span key={amenity.id} className="amenity-tag">
-          {amenity.name}
-        </span>
-      ))}
-    </div>
-  </div>
-)}
-                    <div className="room-meta">
-                      <span>{branch.city}</span>
-                      <span>{room.totalRooms} rooms in inventory</span>
-                    </div>
-                    <div className="room-card-footer">
-                      <div>
-                        <strong className="room-price">R{room.pricePerNight.toLocaleString("en-ZA")}</strong>
-                        <span className="per-night"> / night</span>
-                      </div>
-                    
-<a
-  className="room-book-button"
-  href="#booking"
-  onClick={(event) => {
-    event.preventDefault();
+  function handleBookStayRoom(
+    room: RoomType,
+    checkIn: string,
+    checkOut: string,
+    guests: number,
+  ) {
     setBookingRoom(room);
-    setBookingCheckIn("");
-    setBookingCheckOut("");
-    setBookingAdults(1);
+    setBookingCheckIn(checkIn);
+    setBookingCheckOut(checkOut);
+    setBookingAdults(guests);
     setBookingChildren(0);
     setBookingQuantity(1);
     setBookingMessage("");
     setBookingError("");
-    document.getElementById("booking-form")?.scrollIntoView({
-      behavior: "smooth",
-    });
-  }}
->
-  Book now <span>→</span>
-</a>
+  }
 
-                    </div>
-                  </div>
-                </article>
-              )),
-            )}
-          </div>
-        </section>
+  const profilePage = (
+    <ProfilePage
+      profile={profile}
+      profileLoading={profileLoading}
+      profileError={profileError}
+      profileMessage={profileMessage}
+      profileSaving={profileSaving}
+      profileName={profileName}
+      setProfileName={setProfileName}
+      profileTitle={profileTitle}
+      setProfileTitle={setProfileTitle}
+      setProfileError={setProfileError}
+      setProfileMessage={setProfileMessage}
+      handleSaveProfile={handleSaveProfile}
+      passwordError={passwordError}
+      passwordMessage={passwordMessage}
+      passwordCurrent={passwordCurrent}
+      setPasswordCurrent={setPasswordCurrent}
+      passwordNew={passwordNew}
+      setPasswordNew={setPasswordNew}
+      passwordConfirm={passwordConfirm}
+      setPasswordConfirm={setPasswordConfirm}
+      passwordSaving={passwordSaving}
+      handleChangePassword={handleChangePassword}
+      handleLoadMyBookings={handleLoadMyBookings}
+      handleLoadFavorites={handleLoadFavorites}
+      onSignOut={handleSignOut}
+      showShortcuts={!adminPortalOpen}
+    />
+  );
 
-        {bookingRoom && (
-          <section className="auth-section" id="booking-form">
-            <div className="auth-card booking-card">
-              <button
-                type="button"
-                className="auth-close"
-                onClick={() => {
-                  setBookingRoom(null);
-                  setBookingMessage("");
-                  setBookingError("");
-                }}
-                aria-label="Close booking form"
-              >
-                ×
-              </button>
-
-              <p className="eyebrow">
-                <span /> THE GRAND AURELIA
-              </p>
-
-              <h2>
-                Book your <em>stay.</em>
-              </h2>
-
-              <p className="auth-description">
-                {bookingRoom.name} · R
-                {bookingRoom.pricePerNight.toLocaleString("en-ZA")} per night
-              </p>
-
-              <form onSubmit={handleBookingSubmit}>
-                <label className="auth-label">
-                  Check-in
-                  <input
-                    type="date"
-                    value={bookingCheckIn}
-                    onChange={(event) =>
-                      setBookingCheckIn(event.target.value)
-                    }
-                    min={new Date().toLocaleDateString("en-CA")}
-                    required
-                  />
-                </label>
-
-                <label className="auth-label">
-                  Check-out
-                  <input
-                    type="date"
-                    value={bookingCheckOut}
-                    onChange={(event) =>
-                      setBookingCheckOut(event.target.value)
-                    }
-                    min={bookingCheckIn || new Date().toLocaleDateString("en-CA")}
-                    required
-                  />
-                </label>
-
-                <label className="auth-label">
-                  Adults
-                  <input
-                    type="number"
-                    min={1}
-                    max={bookingRoom.capacity * bookingQuantity}
-                    value={bookingAdults}
-                    onChange={(event) =>
-                      setBookingAdults(Number(event.target.value))
-                    }
-                    required
-                  />
-                </label>
-
-                <label className="auth-label">
-                  Children
-                  <input
-                    type="number"
-                    min={0}
-                    value={bookingChildren}
-                    onChange={(event) =>
-                      setBookingChildren(Number(event.target.value))
-                    }
-                    required
-                  />
-                </label>
-
-                <label className="auth-label">
-                  Rooms
-                  <select
-                    value={bookingQuantity}
-                    onChange={(event) =>
-                      setBookingQuantity(Number(event.target.value))
-                    }
-                    required
-                  >
-                    {Array.from(
-                      { length: bookingRoom.totalRooms },
-                      (_, index) => index + 1,
-                    ).map((quantity) => (
-                      <option key={quantity} value={quantity}>
-                        {quantity} {quantity === 1 ? "room" : "rooms"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {bookingCheckIn &&
-                  bookingCheckOut &&
-                  bookingCheckOut > bookingCheckIn && (
-                    <p className="auth-description">
-                      Estimated total: R
-                      {(
-                        bookingRoom.pricePerNight *
-                        Math.round(
-                          (new Date(`${bookingCheckOut}T00:00:00`).getTime() -
-                            new Date(`${bookingCheckIn}T00:00:00`).getTime()) /
-                            86400000,
-                        ) *
-                        bookingQuantity
-                      ).toLocaleString("en-ZA")}
-                    </p>
-                  )}
-
-                {bookingError && (
-                  <p className="auth-feedback auth-feedback-error" role="alert">
-                    {bookingError}
-                  </p>
-                )}
-
-             
-{bookingMessage && (
-  <div className="booking-confirmation" role="status">
-    <p className="auth-feedback auth-feedback-success">
-      {bookingMessage}
-    </p>
-
-    {bookingConfirmation && (
-      <div className="booking-confirmation-details">
-        <h3>Booking Confirmation</h3>
-
-        <p>
-          <strong>Booking reference:</strong>{" "}
-          {bookingConfirmation.id}
-        </p>
-
-        <p>
-          <strong>Room:</strong>{" "}
-          {bookingRoom?.name ?? "Selected room"}
-        </p>
-
-        <p>
-          <strong>Check-in:</strong>{" "}
-          {new Date(bookingConfirmation.checkIn).toLocaleDateString(
-            "en-ZA",
-          )}
-        </p>
-
-        <p>
-          <strong>Check-out:</strong>{" "}
-          {new Date(bookingConfirmation.checkOut).toLocaleDateString(
-            "en-ZA",
-          )}
-        </p>
-
-        <p>
-          <strong>Rooms booked:</strong> {bookingQuantity}
-        </p>
-
-        <p>
-          <strong>Total price:</strong>{" "}
-          {Number(bookingConfirmation.totalPrice).toLocaleString(
-            "en-ZA",
-            {
-              style: "currency",
-              currency: "ZAR",
-            },
-          )}
-        </p>
-      </div>
-    )}
-  </div>
-)}
-
-
-                {!authUser && (
-                  <p className="auth-description">
-                    You'll need to sign in before confirming your booking.
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  className="gold-button auth-submit"
-                  disabled={bookingLoading}
-                >
-                  {bookingLoading ? "Creating booking..." : "Confirm booking"}
-                </button>
-              </form>
-            </div>
-          </section>
-        )}
-
-        <section className="closing-banner" id="booking">
-          <div>
-            <p className="eyebrow hero-eyebrow"><span /> YOUR NEXT CHAPTER STARTS HERE</p>
-            <h2>Make room for<br /><em>something wonderful.</em></h2>
-          </div>
-          <a className="gold-button" href="#rooms">Find your stay <span>→</span></a>
-        </section>
-        {authUser && showProfile && (
-  <section
-    id="my-profile"
-    className="my-bookings-section profile-section"
-  >
-    <h2>My Profile</h2>
-    <p>Manage your personal details at The Grand Aurelia.</p>
-
-    {profileLoading && <p>Loading your profile...</p>}
-
-    {profileError && (
-      <p className="auth-feedback auth-feedback-error" role="alert">
-        {profileError}
-      </p>
-    )}
-
-    {profileMessage && (
-      <p className="auth-feedback" role="status">
-        {profileMessage}
-      </p>
-    )}
-
-    {profile && !profileLoading && (
-      <>
-        <div className="profile-summary">
-          {profile.image ? (
-            <img
-              src={profile.image}
-              alt="Profile"
-              className="profile-avatar"
-            />
-          ) : (
-            <div className="profile-avatar profile-avatar-placeholder">
-              {(profile.name || profile.email).charAt(0).toUpperCase()}
-            </div>
-          )}
-
-          <div>
-            <h3>{profile.name || "Guest"}</h3>
-            <p>{profile.email}</p>
-            <small>
-              Member since{" "}
-              {new Date(profile.createdAt).toLocaleDateString("en-ZA")}
-            </small>
-          </div>
-        </div>
-
-        <form
-          className="profile-form"
-          onSubmit={handleSaveProfile}
+  return (
+    <div className="site-shell">
+      {adminPortalOpen && authUser?.role === "ADMIN" ? (
+        <AdminPortal
+          activePage={adminPage}
+          userName={authUser.name || authUser.email}
+          onNavigate={navigateAdmin}
+          onTogglePortal={toggleAdminPortal}
+          onOpenProfile={openAdminProfile}
         >
-          <label className="auth-label">
-            Title
-            <select
-              value={profileTitle}
-              onChange={(event) => setProfileTitle(event.target.value)}
-            >
-              <option value="">Select your title</option>
-              <option value="Mr">Mr</option>
-              <option value="Mrs">Mrs</option>
-              <option value="Ms">Ms</option>
-              <option value="Miss">Miss</option>
-              <option value="Dr">Dr</option>
-              <option value="Prof">Prof</option>
-            </select>
-          </label>
-
-          <label className="auth-label">
-            Full name
-            <input
-              type="text"
-              value={profileName}
-              onChange={(event) => setProfileName(event.target.value)}
-              minLength={2}
-              maxLength={100}
-              required
+          {adminPage === "profile" && profilePage}
+          {adminPage === "dashboard" && (
+            <AdminDashboard
+              hotels={hotels}
+              userName={authUser.name}
+              branchCount={allBranches.length}
+              roomCount={allRooms.length}
+              bookings={adminBookings}
+              loading={adminBookingsLoading}
+              error={adminBookingsError}
+              onRefresh={handleLoadAdminBookings}
+              onViewBookings={() => navigateAdmin("bookings")}
             />
-          </label>
-
-          <label className="auth-label">
-            Email address
-            <input
-              type="email"
-              value={profile.email}
-              readOnly
-              disabled
+          )}
+          {(adminPage === "branches" || adminPage === "rooms") && (
+            <AdminAccommodation
+              section={adminPage}
+              onBranchesChanged={loadAccommodationData}
             />
-            <small>Email changes require a separate verification process.</small>
-          </label>
-
-          <button
-            type="submit"
-            className="gold-button"
-            disabled={profileSaving}
-          >
-            {profileSaving ? "Saving..." : "Save Profile"}
-          </button>
-
-          <button
-            type="button"
-            className="login-link sign-out-button"
-            disabled={profileSaving}
-            onClick={() => {
-              setProfileName(profile.name ?? "");
-              setProfileTitle(profile.title ?? "");
-              setProfileError("");
-              setProfileMessage("");
-            }}
-          >
-            Reset Changes
-          </button>
-        </form>
-<div className="profile-password-section">
-  <h3>{profile.hasPassword ? "Change Password" : "Set a Password"}</h3>
-
-  <p>
-    {profile.hasPassword
-      ? "Update your account password securely."
-      : "You signed in with Google. You can also set a password to sign in using your email address."}
-  </p>
-
-  {passwordError && (
-    <p className="auth-feedback auth-feedback-error" role="alert">
-      {passwordError}
-    </p>
-  )}
-
-  {passwordMessage && (
-    <p className="auth-feedback" role="status">
-      {passwordMessage}
-    </p>
-  )}
-
-  <form onSubmit={handleChangePassword} className="profile-form">
-    {profile.hasPassword && (
-      <label className="auth-label">
-        Current password
-        <input
-          type="password"
-          value={passwordCurrent}
-          onChange={(event) => setPasswordCurrent(event.target.value)}
-          autoComplete="current-password"
-          required
-        />
-      </label>
-    )}
-
-    <label className="auth-label">
-      New password
-      <input
-        type="password"
-        value={passwordNew}
-        onChange={(event) => setPasswordNew(event.target.value)}
-        autoComplete="new-password"
-        minLength={8}
-        required
-      />
-    </label>
-
-    <label className="auth-label">
-      Confirm new password
-      <input
-        type="password"
-        value={passwordConfirm}
-        onChange={(event) => setPasswordConfirm(event.target.value)}
-        autoComplete="new-password"
-        minLength={8}
-        required
-      />
-    </label>
-
-    <button
-      type="submit"
-      className="gold-button"
-      disabled={passwordSaving}
-    >
-      {passwordSaving
-        ? "Updating password..."
-        : profile.hasPassword
-          ? "Change Password"
-          : "Set Password"}
-    </button>
-  </form>
-</div>
-        <div className="profile-shortcuts">
-          <button
-            type="button"
-            className="login-link sign-out-button"
-            onClick={async () => {
-              await handleLoadMyBookings();
-
-              document.getElementById("my-bookings")?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-            }}
-          >
-            View My Bookings
-          </button>
-
-          <button
-            type="button"
-            className="login-link sign-out-button"
-            onClick={async () => {
-              await handleLoadFavorites();
-
-              window.requestAnimationFrame(() => {
-                document.getElementById("favorite-hotels")?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              });
-            }}
-          >
-            View My Favourites
-          </button>
-        </div>
-      </>
-    )}
-  </section>
-)}
-{showMyBookings && (
-<section id="my-bookings" className="my-bookings-section">
-   <h2>My Bookings</h2>
-<p>Your reservations at The Grand Aurelia.</p>
-
-{cancellationMessage && (
-  <p role="status" className="booking-cancellation-message">
-    {cancellationMessage}
-  </p>
-)}
-
-    {myBookingsLoading && <p>Loading your bookings...</p>}
-
-    {myBookingsError && (
-      <p role="alert">{myBookingsError}</p>
-    )}
-
-    {!myBookingsLoading &&
-      !myBookingsError &&
-      myBookings.length === 0 && (
-        <p>You don't have any bookings yet.</p>
-      )}
-
-    {!myBookingsLoading &&
-      !myBookingsError &&
-      myBookings.map((booking) => (
-        <article key={booking.id} className="my-booking-card">
-          <h3>{booking.roomType.name}</h3>
-          <p>
-            Hotel: {booking.roomType.branch.hotel.name}
-          </p>
-          <p>
-            Branch: {booking.roomType.branch.name}
-          </p>
-          <p>
-            Check-in:{" "}
-            {new Date(booking.checkIn).toLocaleDateString("en-ZA")}
-          </p>
-          <p>
-            Check-out:{" "}
-            {new Date(booking.checkOut).toLocaleDateString("en-ZA")}
-          </p>
-          <p>Rooms: {booking.roomQuantity}</p>
-          <p>
-            Total:{" "}
-            {Number(booking.totalPrice).toLocaleString("en-ZA", {
-              style: "currency",
-              currency: "ZAR",
-            })}
-          </p>
-
-<p
-  className={`booking-status booking-status-${booking.status.toLowerCase()}`}
+          )}
+          {adminPage === "bookings" && (
+            <AdminReservationsPage
+              adminBookings={adminBookings}
+              adminBookingsLoading={adminBookingsLoading}
+              adminBookingsError={adminBookingsError}
+              adminBookingsMessage={adminBookingsMessage}
+              adminActionBookingId={adminActionBookingId}
+              handleAdminBookingStatus={handleAdminBookingStatus}
+              handleModifyAdminBooking={handleModifyAdminBooking}
+            />
+          )}
+          {adminPage === "customers" && <AdminUsers currentUserId={authUser.id} />}
+          {adminPage === "reviews" && (
+            <section className="portal-table-card portal-reviews">
+              <div className="portal-card-heading">
+                <div><p>GUEST VOICE</p><h3>Hotel reviews</h3></div>
+              </div>
+              {hotels.map((hotel) => {
+                const reviews = hotelReviews[hotel.id];
+                return (
+                  <article className="portal-review-hotel" key={hotel.id}>
+                    <div className="portal-review-hotel-heading">
+                      <div>
+                        <h4>{hotel.name}</h4>
+                        <p>
+                          {reviews
+                            ? `${reviews.count} review${reviews.count === 1 ? "" : "s"}${reviews.averageRating === null ? "" : ` · ${reviews.averageRating.toFixed(1)} / 5`}`
+                            : "Reviews have not been loaded."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="portal-secondary-button"
+                        disabled={reviewsLoadingHotelId === hotel.id}
+                        onClick={() => void handleLoadHotelReviews(hotel.id)}
+                      >
+                        {reviewsLoadingHotelId === hotel.id
+                          ? "Loading..."
+                          : reviews
+                            ? "Refresh reviews"
+                            : "Load reviews"}
+                      </button>
+                    </div>
+                    <ToastMessage message={reviewErrors[hotel.id]} />
+                    {reviews?.data.slice(0, 3).map((review) => (
+                      <div className="portal-review-entry" key={review.id}>
+                        <div>
+                          <b>{review.user.name || "Guest"}</b>
+                          <span>{review.rating} / 5</span>
+                        </div>
+                        {review.comment && <p>{review.comment}</p>}
+                        <small>{new Date(review.createdAt).toLocaleDateString("en-ZA")}</small>
+                      </div>
+                    ))}
+                    {reviews?.count === 0 && (
+                      <p className="portal-empty">No reviews have been submitted for this hotel.</p>
+                    )}
+                  </article>
+                );
+              })}
+            </section>
+          )}
+          {adminPage === "analytics" && (
+            <AdminAnalytics
+              bookings={adminBookings}
+              loading={adminBookingsLoading}
+              error={adminBookingsError}
+              onRefresh={handleLoadAdminBookings}
+            />
+          )}
+        </AdminPortal>
+      ) : (
+        <>
+          <Header
+            authUser={authUser}
+            profileLoading={profileLoading}
+            guestPage={guestPage}
+            onNavigatePage={navigateGuestPage}
+            handleLoadProfile={handleLoadProfile}
+            myBookingsLoading={myBookingsLoading}
+            handleLoadMyBookings={handleLoadMyBookings}
+            favoritesLoading={favoritesLoading}
+            handleLoadFavorites={handleLoadFavorites}
+            setAuthMode={setAuthMode}
+            adminPortalOpen={adminPortalOpen}
+            onToggleAdminPortal={toggleAdminPortal}
+          />
+          <main>
+            <AuthModal
+  authMode={authMode}
+  setAuthMode={setAuthMode}
+  authName={authName}
+  setAuthName={setAuthName}
+  authEmail={authEmail}
+  setAuthEmail={setAuthEmail}
+  authTitle={authTitle}
+  setAuthTitle={setAuthTitle}
+  authPassword={authPassword}
+  setAuthPassword={setAuthPassword}
+  authConfirmPassword={authConfirmPassword}
+  setAuthConfirmPassword={setAuthConfirmPassword}
+  authMessage={authMessage}
+  setAuthMessage={setAuthMessage}
+  authError={authError}
+  setAuthError={setAuthError}
+  authLoading={authLoading}
+  handleAuthSubmit={handleAuthSubmit}
+  apiBaseUrl={API_BASE_URL}
+/>
+{guestPage === "map" ? (
+ <BranchMapPage
+   branches={allBranches}
+   loading={loading}
+   error={error}
+   onBack={() => navigateGuestPage("discover")}
+ />
+) : guestPage === "stay" && selectedStay ? (
+ <BranchStayPage
+   hotel={selectedStay.hotel}
+   branch={selectedStay.branch}
+   rooms={rooms[selectedStay.branch.id] ?? []}
+   favorite={favoriteBranchIds.includes(selectedStay.branch.id)}
+   rating={hotelReviews[selectedStay.hotel.id]?.averageRating ?? null}
+   onBack={() => navigateGuestPage("discover")}
+   onToggleFavorite={() => void handleToggleFavorite(selectedStay.branch)}
+   onBookRoom={handleBookStayRoom}
+ />
+) : guestPage === "discover" || !authUser ? (
+<DiscoverPage
+  hotels={hotels}
+  branches={branches}
+  rooms={rooms}
+  allBranches={allBranches}
+  filteredHotels={filteredHotels}
+  availableRoomAmenities={availableRoomAmenities}
+  loading={loading}
+  error={error}
+  hotelSearch={hotelSearch}
+  setHotelSearch={setHotelSearch}
+  locationSearch={locationSearch}
+  setLocationSearch={setLocationSearch}
+  minNightlyPrice={minNightlyPrice}
+  setMinNightlyPrice={setMinNightlyPrice}
+  maxNightlyPrice={maxNightlyPrice}
+  setMaxNightlyPrice={setMaxNightlyPrice}
+  setActiveBranchPhoto={setActiveBranchPhoto}
+  onViewStay={handleViewStay}
+  favoriteBranchIds={favoriteBranchIds}
+  favoritesError={favoritesError}
+  favoritesMessage={favoritesMessage}
+  favoriteActionBranchId={favoriteActionBranchId}
+  handleToggleFavorite={handleToggleFavorite}
+  handleShareHotel={handleShareHotel}
+  hotelReviews={hotelReviews}
+  reviewsOpen={reviewsOpen}
+  setReviewsOpen={setReviewsOpen}
+  reviewsLoadingHotelId={reviewsLoadingHotelId}
+  reviewErrors={reviewErrors}
+  reviewMessages={reviewMessages}
+  reviewRatings={reviewRatings}
+  setReviewRatings={setReviewRatings}
+  reviewComments={reviewComments}
+  setReviewComments={setReviewComments}
+  reviewSubmittingHotelId={reviewSubmittingHotelId}
+  handleLoadHotelReviews={handleLoadHotelReviews}
+  handleSubmitHotelReview={handleSubmitHotelReview}
+  selectedRoomAmenityIds={selectedRoomAmenityIds}
+  setSelectedRoomAmenityIds={setSelectedRoomAmenityIds}
+  setBookingRoom={setBookingRoom}
+  setBookingCheckIn={setBookingCheckIn}
+  setBookingCheckOut={setBookingCheckOut}
+  setBookingAdults={setBookingAdults}
+  setBookingChildren={setBookingChildren}
+  setBookingQuantity={setBookingQuantity}
+  setBookingMessage={setBookingMessage}
+  setBookingError={setBookingError}
 >
-  Status:{" "}
-  {booking.status === "PENDING"
-    ? "Pending confirmation"
-    : booking.status === "CONFIRMED"
-      ? "Confirmed"
-      : booking.status === "CANCELLED"
-        ? "Cancelled"
-        : booking.status === "COMPLETED"
-          ? "Completed"
-          : booking.status}
-</p>
-          
-{booking.status !== "CANCELLED" &&
-  booking.status !== "COMPLETED" && (
-    <button
-      type="button"
-      className="login-link sign-out-button"
-      onClick={() => handleCancelBooking(booking.id)}
-      disabled={cancellingBookingId === booking.id}
-    >
-      {cancellingBookingId === booking.id
-        ? "Cancelling..."
-        : "Cancel Booking"}
-    </button>
-  )}
 
-        </article>
-      ))}
-  </section>
+</DiscoverPage>
+) : guestPage === "favorites" ? (
+ <FavouritesPage
+  favoriteBranches={favoriteBranches}
+  favoritesError={favoritesError}
+  favoritesMessage={favoritesMessage}
+  favoritesLoading={favoritesLoading}
+  favoriteActionBranchId={favoriteActionBranchId}
+  allBranches={allBranches}
+  hotels={hotels}
+  rooms={rooms}
+  hotelReviews={hotelReviews}
+  handleToggleFavorite={handleToggleFavorite}
+  onViewStay={handleViewStay}
+/>
+ ) : guestPage === "profile" ? (
+  profilePage
+ ) : (
+  <MyBookingsPage
+    myBookings={myBookings}
+    myBookingsLoading={myBookingsLoading}
+    myBookingsError={myBookingsError}
+    cancellationMessage={cancellationMessage}
+    cancellingBookingId={cancellingBookingId}
+    handleCancelBooking={handleCancelBooking}
+  />
+)}
+{bookingRoom && (
+  <BookingPage
+    bookingRoom={bookingRoom}
+    bookingCheckIn={bookingCheckIn}
+    setBookingCheckIn={setBookingCheckIn}
+    bookingCheckOut={bookingCheckOut}
+    setBookingCheckOut={setBookingCheckOut}
+    bookingAdults={bookingAdults}
+    setBookingAdults={setBookingAdults}
+    bookingChildren={bookingChildren}
+    setBookingChildren={setBookingChildren}
+    bookingQuantity={bookingQuantity}
+    setBookingQuantity={setBookingQuantity}
+    bookingError={bookingError}
+    bookingMessage={bookingMessage}
+    bookingConfirmation={bookingConfirmation}
+    bookingLoading={bookingLoading}
+    isAuthenticated={Boolean(authUser)}
+    handleBookingSubmit={handleBookingSubmit}
+    handleClose={() => {
+      setBookingRoom(null);
+      setBookingMessage("");
+      setBookingError("");
+    }}
+  />
 )}
 
-{authUser?.role === "ADMIN" && showAdminBookings && (
-  <section id="admin-bookings" className="my-bookings-section">
-    <h2>Admin Reservations</h2>
-    <p>View and manage guest reservations at The Grand Aurelia.</p>
-
-    {adminBookingsLoading && <p>Loading reservations...</p>}
-
-    {adminBookingsError && (
-      <p role="alert">{adminBookingsError}</p>
-    )}
-
-    {adminBookingsMessage && (
-      <p role="status">{adminBookingsMessage}</p>
-    )}
-
-    {!adminBookingsLoading &&
-      !adminBookingsError &&
-      adminBookings.length === 0 && (
-        <p>No reservations found.</p>
+          </main>
+          <Footer />
+        </>
       )}
-
-    {!adminBookingsLoading &&
-      adminBookings.map((booking) => (
-        <article key={booking.id} className="my-booking-card">
-          <h3>{booking.roomType.branch.hotel.name}</h3>
-
-          <p>
-            <strong>Booking reference:</strong> {booking.id}
-          </p>
-
-          <p>
-            <strong>Guest:</strong>{" "}
-            {booking.user.name || "Guest"}
-          </p>
-
-          <p>
-            <strong>Email:</strong> {booking.user.email}
-          </p>
-
-          <p>
-            <strong>Room:</strong> {booking.roomType.name}
-          </p>
-
-          <p>
-            <strong>Branch:</strong> {booking.roomType.branch.name}
-          </p>
-
-          <p>
-            <strong>Address:</strong>{" "}
-            {booking.roomType.branch.address},{" "}
-            {booking.roomType.branch.city}
-          </p>
-
-          <p>
-            <strong>Check-in:</strong>{" "}
-            {new Date(booking.checkIn).toLocaleDateString("en-ZA")}
-          </p>
-
-          <p>
-            <strong>Check-out:</strong>{" "}
-            {new Date(booking.checkOut).toLocaleDateString("en-ZA")}
-          </p>
-
-          <p>
-            <strong>Adults:</strong> {booking.adults}
-          </p>
-
-          <p>
-            <strong>Children:</strong> {booking.children}
-          </p>
-
-          <p>
-            <strong>Rooms:</strong> {booking.roomQuantity}
-          </p>
-
-          <p>
-            <strong>Total:</strong>{" "}
-            {Number(booking.totalPrice).toLocaleString("en-ZA", {
-              style: "currency",
-              currency: "ZAR",
-            })}
-          </p>
-
-          <p
-            className={`booking-status booking-status-${booking.status.toLowerCase()}`}
-          >
-            Status:{" "}
-            {booking.status === "PENDING"
-              ? "Pending confirmation"
-              : booking.status === "CONFIRMED"
-                ? "Confirmed"
-                : booking.status === "CANCELLED"
-                  ? "Cancelled"
-                  : booking.status === "COMPLETED"
-                    ? "Completed"
-                    : booking.status}
-          </p>
-
-          <h4>Payments</h4>
-
-          {booking.payments.length === 0 ? (
-            <p>No payment records.</p>
-          ) : (
-            booking.payments.map((payment) => (
-              <p key={payment.id}>
-                {payment.provider}:{" "}
-                {Number(payment.amount).toLocaleString("en-ZA", {
-                  style: "currency",
-                  currency: payment.currency,
-                })}{" "}
-                — {payment.status}
-              </p>
-            ))
-          )}
-
-          {booking.status === "PENDING" && (
-            <button
-              type="button"
-              className="login-link sign-out-button"
-              disabled={adminActionBookingId === booking.id}
-              onClick={() =>
-                handleAdminBookingStatus(booking.id, "CONFIRMED")
-              }
-            >
-              Confirm Reservation
-            </button>
-          )}
-
-          {(booking.status === "PENDING" ||
-            booking.status === "CONFIRMED") && (
-            <>
-              <button
-                type="button"
-                className="login-link sign-out-button"
-                disabled={adminActionBookingId === booking.id}
-                onClick={() => handleModifyAdminBooking(booking)}
-              >
-                Modify Reservation
-              </button>
-
-              <button
-                type="button"
-                className="login-link sign-out-button"
-                disabled={adminActionBookingId === booking.id}
-                onClick={() =>
-                  handleAdminBookingStatus(booking.id, "CANCELLED")
-                }
-              >
-                Cancel Reservation
-              </button>
-            </>
-          )}
-        </article>
-      ))}
-  </section>
-)}
-
-      </main>
-
-      <footer className="site-footer">
-        <a className="brand footer-brand" href="#home">
-          <span className="brand-mark">A</span>
-          <span className="brand-copy">
-            <strong>THE GRAND AURELIA</strong>
-            <small>A STAY BEYOND EXPECTATIONS</small>
-          </span>
-        </a>
-        <p>Thoughtfully hosted in Mpumalanga, South Africa.</p>
-        <span className="footer-copyright">© {new Date().getFullYear()} The Grand Aurelia</span>
-      </footer>
             {activeBranchPhoto && (
         <div
           className="branch-lightbox"
@@ -3189,14 +2248,151 @@ const prices = hotelBranches
             )}
 
             <div className="branch-lightbox-caption">
-              {activeBranchPhoto.branchName} ·{" "}
+              {activeBranchPhoto.branchName} Â·{" "}
               {activeBranchPhoto.index + 1} of{" "}
               {activeBranchPhoto.photos.length}
             </div>
           </div>
         </div>
       )}
+      {bookingToModify && (
+        <div
+          className="confirm-dialog-overlay"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              adminActionBookingId !== bookingToModify.id
+            ) {
+              setBookingToModify(null);
+            }
+          }}
+        >
+          <section
+            className="confirm-dialog modify-reservation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modify-reservation-title"
+          >
+            <h2 id="modify-reservation-title">Modify reservation</h2>
+            <p>
+              Update dates and guest/room counts for {bookingToModify.user.name || bookingToModify.user.email}.
+            </p>
+            <form onSubmit={submitModifyAdminBooking}>
+              <div className="modify-reservation-fields">
+                <label>
+                  Check-in
+                  <input
+                    type="date"
+                    value={modifyBookingForm.checkIn}
+                    onChange={(event) =>
+                      setModifyBookingForm((current) => ({
+                        ...current,
+                        checkIn: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Check-out
+                  <input
+                    type="date"
+                    min={modifyBookingForm.checkIn || undefined}
+                    value={modifyBookingForm.checkOut}
+                    onChange={(event) =>
+                      setModifyBookingForm((current) => ({
+                        ...current,
+                        checkOut: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Adults
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={modifyBookingForm.adults}
+                    onChange={(event) =>
+                      setModifyBookingForm((current) => ({
+                        ...current,
+                        adults: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Children
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={modifyBookingForm.children}
+                    onChange={(event) =>
+                      setModifyBookingForm((current) => ({
+                        ...current,
+                        children: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Rooms
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={modifyBookingForm.roomQuantity}
+                    onChange={(event) =>
+                      setModifyBookingForm((current) => ({
+                        ...current,
+                        roomQuantity: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+              </div>
+              <ToastMessage message={modifyBookingError} />
+              <div className="confirm-dialog-actions">
+                <button
+                  type="button"
+                  className="confirm-dialog-cancel"
+                  onClick={() => setBookingToModify(null)}
+                  disabled={adminActionBookingId === bookingToModify.id}
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  className="confirm-dialog-accept"
+                  disabled={adminActionBookingId === bookingToModify.id}
+                >
+                  {adminActionBookingId === bookingToModify.id
+                    ? "Saving..."
+                    : "Review and save"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {confirmationDialog}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="*" element={<AppContent />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

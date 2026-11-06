@@ -36,6 +36,7 @@ model HotelBranch {
   hotelId            String          @db.Uuid
   hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes          RoomType[]
+  favorites          BranchFavorite[]
   checkInTime        String?
   checkOutTime       String?
   cancellationPolicy String?
@@ -115,8 +116,9 @@ model User {
 
   bookings  Booking[]
   reviews   Review[]
-  favorites Favorite[]
-  role      UserRole   @default(GUEST)
+  favorites       Favorite[]
+  branchFavorites BranchFavorite[]
+  role            UserRole   @default(GUEST)
 }
 
 model HotelImage {
@@ -192,6 +194,18 @@ model Favorite {
 
   @@id([userId, hotelId])
   @@index([hotelId])
+}
+
+model BranchFavorite {
+  userId    String   @db.Uuid
+  branchId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch HotelBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([userId, branchId])
+  @@index([branchId])
 }
 
 model Payment {

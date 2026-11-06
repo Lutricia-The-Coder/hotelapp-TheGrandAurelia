@@ -1,11 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type ChangeEvent,
 } from "react";
-import { API_BASE_URL } from "./api";
+import { API_BASE_URL } from "../api";
+import useConfirmDialog from "../components/ConfirmDialog";
+import { ToastMessage } from "../components/ToastNotifications";
 
 
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
@@ -169,12 +172,19 @@ async function adminRequest<T>(
 
   return result.data as T;
 }
-export default function AdminAccommodation() {
+export default function AdminAccommodation({
+  onBranchesChanged,
+  section,
+}: {
+  onBranchesChanged?: () => Promise<void>;
+  section: "branches" | "rooms";
+}) {
   const [hotels, setHotels] = useState<HotelRecord[]>([]);
   const [roomTypeOptions, setRoomTypeOptions] = useState<RoomTypeOptionRecord[]>([]);
 const [amenities, setAmenities] = useState<AmenityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyAction, setBusyAction] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -191,6 +201,14 @@ const [editingAmenityId, setEditingAmenityId] = useState<string | null>(null);
   const [existingBranchImages, setExistingBranchImages] = useState<string[]>([]);
   const [pendingBranchPhotos, setPendingBranchPhotos] = useState<PendingBranchPhoto[]>([]);
   const [coverImageSelection, setCoverImageSelection] = useState("");
+  const branchFormRef = useRef<HTMLFormElement>(null);
+  const { confirm, dialog } = useConfirmDialog();
+
+  useEffect(() => {
+    if (!branchForm.hotelId) return;
+    branchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    branchFormRef.current?.querySelector("input")?.focus({ preventScroll: true });
+  }, [branchForm.hotelId, branchForm.id]);
 
   function clearBranchPhotoSelection() {
     pendingBranchPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
@@ -276,9 +294,6 @@ function handleBranchPhotoSelection(event: ChangeEvent<HTMLInputElement>) {
   }
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
     try {
      const [hotelRows, optionRows, amenityRows] = await Promise.all([
   adminRequest<HotelRecord[]>("/hotels"),
@@ -314,7 +329,7 @@ setHotels(completeHotels);
   }, []);
 
   useEffect(() => {
-    void loadData();
+    void Promise.resolve().then(loadData);
   }, [loadData]);
 
   function clearFeedback() {
@@ -336,6 +351,16 @@ setHotels(completeHotels);
       return;
     }
 
+    const branchAction = branchForm.id ? "Save changes to" : "Create";
+    if (!(await confirm({
+      title: `${branchAction} branch?`,
+      message: `Are you sure you want to ${branchAction.toLowerCase()} branch "${branchForm.name.trim()}"?`,
+      confirmLabel: branchForm.id ? "Save changes" : "Create branch",
+    }))) {
+      return;
+    }
+
+    setBusyAction(branchForm.id ? "Saving branch changes..." : "Creating branch...");
     setSaving(true);
     try {
       const formData = new FormData();
@@ -368,22 +393,28 @@ setHotels(completeHotels);
       clearBranchPhotoSelection();
       setBranchForm(newBranchForm());
       await loadData();
+      await onBranchesChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save branch.");
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
 
   async function deleteBranch(branch: BranchRecord) {
     clearFeedback();
 
-    const confirmed = window.confirm(
-      `Delete "${branch.name}" and all its room types? Reservations may prevent deletion.`,
-    );
+    const confirmed = await confirm({
+      title: "Delete branch?",
+      message: `Delete "${branch.name}" and all its room types? Reservations may prevent deletion.`,
+      confirmLabel: "Delete branch",
+      destructive: true,
+    });
 
     if (!confirmed) return;
 
+    setBusyAction("Deleting branch...");
     setSaving(true);
 
     try {
@@ -403,12 +434,14 @@ setHotels(completeHotels);
 
       setMessage("Branch deleted successfully.");
       await loadData();
+      await onBranchesChanged?.();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to delete branch.",
       );
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
 
@@ -436,6 +469,14 @@ setHotels(completeHotels);
     return;
   }
 
+  const roomAction = roomForm.id ? "Save changes to" : "Create";
+  if (!(await confirm({
+    title: `${roomAction} room type?`,
+    message: `Are you sure you want to ${roomAction.toLowerCase()} this room type?`,
+    confirmLabel: roomForm.id ? "Save changes" : "Create room type",
+  }))) return;
+
+  setBusyAction(roomForm.id ? "Saving room type changes..." : "Creating room type...");
   setSaving(true);
 
   try {
@@ -469,19 +510,22 @@ setHotels(completeHotels);
     );
   } finally {
     setSaving(false);
+    setBusyAction("");
   }
 }
   async function deleteRoom(room: RoomRecord) {
     clearFeedback();
 
-    if (
-      !window.confirm(
-        `Delete the "${room.name}" room type? Existing reservations may prevent deletion.`,
-      )
-    ) {
+    if (!(await confirm({
+      title: "Delete room type?",
+      message: `Delete the "${room.name}" room type? Existing reservations may prevent deletion.`,
+      confirmLabel: "Delete room type",
+      destructive: true,
+    }))) {
       return;
     }
 
+    setBusyAction("Deleting room type...");
     setSaving(true);
 
     try {
@@ -502,6 +546,7 @@ setHotels(completeHotels);
       );
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
   async function saveRoomTypeOption(event: FormEvent<HTMLFormElement>) {
@@ -514,6 +559,14 @@ setHotels(completeHotels);
       return;
     }
 
+    const optionAction = editingRoomTypeOptionId ? "Rename" : "Add";
+    if (!(await confirm({
+      title: `${optionAction} room type option?`,
+      message: `Are you sure you want to ${optionAction.toLowerCase()} room type option "${name}"?`,
+      confirmLabel: editingRoomTypeOptionId ? "Save changes" : "Add option",
+    }))) return;
+
+    setBusyAction(editingRoomTypeOptionId ? "Saving room type option..." : "Adding room type option...");
     setSaving(true);
     try {
       if (editingRoomTypeOptionId) {
@@ -535,11 +588,24 @@ setHotels(completeHotels);
       setError(err instanceof Error ? err.message : "Failed to save room type option.");
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
 
   async function toggleRoomTypeOption(option: RoomTypeOptionRecord) {
     clearFeedback();
+    const nextState = option.isActive ? "deactivate" : "activate";
+    if (!(await confirm({
+      title: `${nextState[0].toUpperCase()}${nextState.slice(1)} room type option?`,
+      message: `Are you sure you want to ${nextState} "${option.name}"?`,
+      confirmLabel: nextState[0].toUpperCase() + nextState.slice(1),
+    }))) {
+      return;
+    }
+
+    setBusyAction(
+      `${option.isActive ? "Deactivating" : "Activating"} room type option...`,
+    );
     setSaving(true);
 
     try {
@@ -558,6 +624,7 @@ setHotels(completeHotels);
       setError(err instanceof Error ? err.message : "Failed to update room type option.");
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
 
@@ -571,6 +638,14 @@ setHotels(completeHotels);
       return;
     }
 
+    const amenityAction = editingAmenityId ? "Rename" : "Add";
+    if (!(await confirm({
+      title: `${amenityAction} amenity?`,
+      message: `Are you sure you want to ${amenityAction.toLowerCase()} amenity "${name}"?`,
+      confirmLabel: editingAmenityId ? "Save changes" : "Add amenity",
+    }))) return;
+
+    setBusyAction(editingAmenityId ? "Saving amenity changes..." : "Adding amenity...");
     setSaving(true);
     try {
       if (editingAmenityId) {
@@ -592,6 +667,7 @@ setHotels(completeHotels);
       setError(err instanceof Error ? err.message : "Failed to save amenity.");
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
 
@@ -606,8 +682,14 @@ setHotels(completeHotels);
       return;
     }
 
-    if (!window.confirm(`Delete the "${amenity.name}" amenity?`)) return;
+    if (!(await confirm({
+      title: "Delete amenity?",
+      message: `Are you sure you want to delete the "${amenity.name}" amenity?`,
+      confirmLabel: "Delete amenity",
+      destructive: true,
+    }))) return;
 
+    setBusyAction("Deleting amenity...");
     setSaving(true);
     try {
       await adminRequest(
@@ -620,41 +702,58 @@ setHotels(completeHotels);
       setError(err instanceof Error ? err.message : "Failed to delete amenity.");
     } finally {
       setSaving(false);
+      setBusyAction("");
     }
   }
   return (
-    <section id="admin-accommodation" className="admin-accommodation">
+    <section
+      id="admin-accommodation"
+      className="admin-accommodation"
+      aria-busy={loading || saving}
+    >
       <div className="admin-accommodation-heading">
         <div>
           <p className="admin-eyebrow">PROPERTY MANAGEMENT</p>
-          <h2>Accommodation Management</h2>
+          <h2>{section === "branches" ? "Branch Management" : "Room Management"}</h2>
           <p>
-           Manage The Grand Aurelia branches, room types, guest capacity and nightly
-pricing.
+            {section === "branches"
+              ? "Manage The Grand Aurelia branches and their details."
+              : "Manage room type options, amenities, and rooms at each branch."}
           </p>
         </div>
 
         <button
           type="button"
           className="admin-secondary-button"
-          onClick={() => void loadData()}
+          onClick={() => {
+            setLoading(true);
+            setError("");
+            setBusyAction("Refreshing accommodation...");
+            void loadData().finally(() => setBusyAction(""));
+          }}
           disabled={loading || saving}
         >
-          Refresh accommodation
+          {loading && busyAction === "Refreshing accommodation..."
+            ? "Refreshing..."
+            : "Refresh accommodation"}
         </button>
       </div>
 
-      {error && (
-        <p className="admin-feedback admin-feedback-error" role="alert">
-          {error}
+      {(loading || saving) && (
+        <p className="admin-feedback" role="status" aria-live="polite">
+          {busyAction || "Loading accommodation..."}
         </p>
       )}
+
+      <ToastMessage message={error} />
 
       {message && (
         <p className="admin-feedback admin-feedback-success" role="status">
           {message}
         </p>
       )}
+      {section === "rooms" && (
+        <>
             <div className="admin-form-card">
         <h3>Room type options</h3>
         <p>Manage the room types available when creating or editing rooms.</p>
@@ -712,7 +811,11 @@ pricing.
 
                         <div className="admin-form-actions">
             <button type="submit" disabled={saving}>
-              {editingRoomTypeOptionId ? "Save name" : "Add room type option"}
+              {saving && busyAction.includes("room type option")
+                ? busyAction
+                : editingRoomTypeOptionId
+                  ? "Save name"
+                  : "Add room type option"}
             </button>
             {editingRoomTypeOptionId && (
               <button
@@ -758,7 +861,11 @@ pricing.
                     onClick={() => void toggleRoomTypeOption(option)}
                     disabled={saving}
                   >
-                    {option.isActive ? "Deactivate" : "Activate"}
+                    {saving && busyAction.includes("room type option")
+                      ? busyAction
+                      : option.isActive
+                        ? "Deactivate"
+                        : "Activate"}
                   </button>
                 </div>
               </div>
@@ -789,7 +896,11 @@ pricing.
 
           <div className="admin-form-actions">
             <button type="submit" disabled={saving}>
-              {editingAmenityId ? "Save name" : "Add amenity"}
+              {saving && busyAction.includes("amenity")
+                ? busyAction
+                : editingAmenityId
+                  ? "Save name"
+                  : "Add amenity"}
             </button>
             {editingAmenityId && (
               <button
@@ -842,7 +953,9 @@ pricing.
                       (amenity._count?.roomTypes ?? 0) > 0
                     }
                   >
-                    Delete
+                    {saving && busyAction === "Deleting amenity..."
+                      ? "Deleting..."
+                      : "Delete"}
                   </button>
                 </div>
               </div>
@@ -850,6 +963,8 @@ pricing.
           )}
         </div>
       </div>
+        </>
+      )}
 
 
       {loading ? (
@@ -858,18 +973,23 @@ pricing.
         <p>No hotels have been created yet.</p>
       ) : (
         <div className="admin-hotel-list">
-        {hotels.slice(0, 1).map((hotel) => (
+        {hotels.map((hotel) => (
             <article className="admin-hotel-card" key={hotel.id}>
               <div className="admin-entity-heading">
                 <div>
                  <h3>The Grand Aurelia</h3>
-                  <p>{hotel.description || "No description provided."}</p>
-                  <small>{hotel.branches.length} branch(es)</small>
+                  {section === "branches" && (
+                    <>
+                      <p>{hotel.description || "No description provided."}</p>
+                      <small>{hotel.branches.length} branch(es)</small>
+                    </>
+                  )}
                 </div>
 
               </div>
 
               <div className="admin-branch-list">
+                {section === "branches" ? (
                 <div className="admin-subheading">
                   <h4>Branches</h4>
                   <button
@@ -880,9 +1000,15 @@ pricing.
                     + Add branch
                   </button>
                 </div>
+                ) : (
+                  <div className="admin-subheading">
+                    <h4>Rooms by branch</h4>
+                  </div>
+                )}
 
-                {branchForm.hotelId === hotel.id && (
+                {section === "branches" && branchForm.hotelId === hotel.id && (
                   <form
+                    ref={branchFormRef}
                     className="admin-form-card admin-nested-form"
                     onSubmit={saveBranch}
                   >
@@ -1030,7 +1156,16 @@ pricing.
                                   {coverImageSelection === photoUrl ? "Cover photo" : "Set as cover"}
                                 </button>
                                 <button type="button" className="admin-danger-button"
-                                  onClick={() => removeExistingBranchImage(photoUrl)} disabled={saving}>Remove</button>
+                                  onClick={async () => {
+                                    if (await confirm({
+                                      title: "Remove branch photo?",
+                                      message: "Remove this photo from the branch?",
+                                      confirmLabel: "Remove photo",
+                                      destructive: true,
+                                    })) {
+                                      removeExistingBranchImage(photoUrl);
+                                    }
+                                  }} disabled={saving}>Remove</button>
                               </div>
                             </div>
                           ))}
@@ -1045,7 +1180,16 @@ pricing.
                                   {coverImageSelection === `new:${index}` ? "Cover photo" : "Set as cover"}
                                 </button>
                                 <button type="button" className="admin-danger-button"
-                                  onClick={() => removePendingBranchPhoto(index)} disabled={saving}>Remove</button>
+                                  onClick={async () => {
+                                    if (await confirm({
+                                      title: "Remove uploaded photo?",
+                                      message: "Remove this photo from the upload list?",
+                                      confirmLabel: "Remove photo",
+                                      destructive: true,
+                                    })) {
+                                      removePendingBranchPhoto(index);
+                                    }
+                                  }} disabled={saving}>Remove</button>
                               </div>
                             </div>
                           ))}
@@ -1055,7 +1199,11 @@ pricing.
 
                     <div className="admin-form-actions">
                       <button type="submit" disabled={saving}>
-                        {branchForm.id ? "Save branch" : "Create branch"}
+                        {saving && busyAction.toLowerCase().includes("branch")
+                          ? busyAction
+                          : branchForm.id
+                            ? "Save branch"
+                            : "Create branch"}
                       </button>
                       <button
                         type="button"
@@ -1084,7 +1232,7 @@ pricing.
                           {branch.roomTypes?.length ?? 0} room type(s)
                         </small>
                       </div>
-                       <div className="admin-inline-actions">
+                       {section === "branches" && <div className="admin-inline-actions">
                         <button
                           type="button"
                           className="admin-secondary-button"
@@ -1100,16 +1248,20 @@ pricing.
                           onClick={() => void deleteBranch(branch)}
                           disabled={saving}
                         >
-                          Delete branch
+                          {saving && busyAction === "Deleting branch..."
+                            ? "Deleting..."
+                            : "Delete branch"}
                         </button>
-                      </div>
+                      </div>}
                     </div>
 
-                    {branch.coverImage && (
+                    {section === "branches" && branch.coverImage && (
                       <img src={getBranchPhotoUrl(branch.coverImage)} alt={`${branch.name} cover`}
                         style={{ width: "100%", maxWidth: 320, height: 150, objectFit: "cover", borderRadius: 8, margin: "12px 0" }} />
                     )}
 
+                    {section === "rooms" && (
+                    <>
                     <div className="admin-subheading">
                       <h5>Room types</h5>
                       <button
@@ -1228,7 +1380,11 @@ pricing.
                         </div>
                          <div className="admin-form-actions">
                           <button type="submit" disabled={saving}>
-                            {roomForm.id ? "Save room type" : "Create room type"}
+                            {saving && busyAction.toLowerCase().includes("room type")
+                              ? busyAction
+                              : roomForm.id
+                                ? "Save room type"
+                                : "Create room type"}
                           </button>
                           <button
                             type="button"
@@ -1292,13 +1448,17 @@ pricing.
                                 onClick={() => void deleteRoom(room)}
                                 disabled={saving}
                               >
-                                Delete
+                                {saving && busyAction === "Deleting room type..."
+                                  ? "Deleting..."
+                                  : "Delete"}
                               </button>
                             </div>
                           </div>
                         ))
                       )}
                     </div>
+                    </>
+                    )}
                   </article>
                 ))}
               </div>
@@ -1306,6 +1466,7 @@ pricing.
           ))}
         </div>
       )}
+      {dialog}
     </section>
   );
 }

@@ -8,6 +8,10 @@ import {
   requireAuth,
   type AuthenticatedRequest,
 } from "../middleware/auth.js";
+import {
+  meetsPasswordPolicy,
+  PASSWORD_POLICY_MESSAGE,
+} from "../lib/password-policy.js";
 
 const router = Router();
 
@@ -144,12 +148,16 @@ router.post("/register", async (req, res) => {
     if (
       typeof email !== "string" ||
       typeof password !== "string" ||
-      !email.trim() ||
-      password.length < 8
+      !email.trim()
     ) {
       res.status(400).json({
-        error: "A valid email and a password of at least 8 characters are required.",
+        error: "A valid email and password are required.",
       });
+      return;
+    }
+
+    if (!meetsPasswordPolicy(password)) {
+      res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
       return;
     }
 

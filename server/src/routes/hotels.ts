@@ -46,7 +46,7 @@ router.get("/:id", async (req, res) => {
 // GET /api/v1/hotels
 router.get("/", async (_req, res) => {
   try {
-    const hotel = await prisma.hotel.findFirst({
+    const hotels = await prisma.hotel.findMany({
       orderBy: { createdAt: "asc" },
       include: {
         branches: true,
@@ -58,11 +58,11 @@ router.get("/", async (_req, res) => {
 
     res.status(200).json({
       success: true,
-      count: hotel ? 1 : 0,
-      data: hotel ? [hotel] : [],
+      count: hotels.length,
+      data: hotels,
     });
   } catch (error) {
-    console.error("Failed to fetch The Grand Aurelia:", error);
+    console.error("Failed to fetch hotels:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch accommodation",

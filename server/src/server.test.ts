@@ -9,9 +9,13 @@ const {
   updateMock,
   deleteMock,
   branchFindManyMock,
+  branchFindUniqueMock,
   branchCreateMock,
   branchUpdateMock,
   branchDeleteMock,
+  branchFavoriteFindManyMock,
+  branchFavoriteUpsertMock,
+  branchFavoriteDeleteManyMock,
   roomFindManyMock,
   roomCreateMock,
   roomUpdateMock,
@@ -33,9 +37,13 @@ transactionMock,
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
   branchFindManyMock: vi.fn(),
+  branchFindUniqueMock: vi.fn(),
   branchCreateMock: vi.fn(),
   branchUpdateMock: vi.fn(),
   branchDeleteMock: vi.fn(),
+  branchFavoriteFindManyMock: vi.fn(),
+  branchFavoriteUpsertMock: vi.fn(),
+  branchFavoriteDeleteManyMock: vi.fn(),
   roomFindManyMock: vi.fn(),
   roomCreateMock: vi.fn(),
   roomUpdateMock: vi.fn(),
@@ -91,9 +99,15 @@ vi.mock("./lib/prisma.js", () => ({
     },
     hotelBranch: {
       findMany: branchFindManyMock,
+      findUnique: branchFindUniqueMock,
       create: branchCreateMock,
       update: branchUpdateMock,
       delete: branchDeleteMock,
+    },
+    branchFavorite: {
+      findMany: branchFavoriteFindManyMock,
+      upsert: branchFavoriteUpsertMock,
+      deleteMany: branchFavoriteDeleteManyMock,
     },
     roomType: {
       findMany: roomFindManyMock,
@@ -127,6 +141,69 @@ payment: {
 
 
 import app from "./app.js";
+
+describe("Branch favorites API", () => {
+  const branchId = "50cb4a8d-4c79-4f34-8894-2a6ca1214c99";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns saved branches for the authenticated user", async () => {
+    branchFavoriteFindManyMock.mockResolvedValue([
+      {
+        userId: "user-test-1",
+        branchId,
+        branch: { id: branchId, name: "Riverside Branch" },
+      },
+    ]);
+
+    const response = await request(app)
+      .get("/api/v1/favorites/branches")
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data[0].branch.name).toBe("Riverside Branch");
+    expect(branchFavoriteFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "user-test-1" } }),
+    );
+  });
+
+  it("saves a branch independently of its hotel", async () => {
+    branchFindUniqueMock.mockResolvedValue({ id: branchId });
+    branchFavoriteUpsertMock.mockResolvedValue({
+      userId: "user-test-1",
+      branchId,
+      branch: { id: branchId, name: "Riverside Branch" },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/favorites/branches/${branchId}`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(branchFavoriteUpsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_branchId: { userId: "user-test-1", branchId },
+        },
+      }),
+    );
+  });
+
+  it("removes only the selected branch favorite", async () => {
+    branchFavoriteDeleteManyMock.mockResolvedValue({ count: 1 });
+
+    const response = await request(app)
+      .delete(`/api/v1/favorites/branches/${branchId}`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(branchFavoriteDeleteManyMock).toHaveBeenCalledWith({
+      where: { userId: "user-test-1", branchId },
+    });
+  });
+});
 
 describe("Health API", () => {
   it("returns a successful health status", async () => {
@@ -162,14 +239,22 @@ it("returns a list of hotels", async () => {
       branches: [],
       images: [],
     },
+    {
+      id: "hotel-test-2",
+      name: "Second Test Hotel",
+      description: "A second hotel for automated testing",
+      branches: [],
+      images: [],
+    },
   ]);
 
   const response = await request(app).get("/api/v1/hotels");
 
   expect(response.status).toBe(200);
   expect(response.body.success).toBe(true);
-  expect(response.body.count).toBe(1);
+  expect(response.body.count).toBe(2);
   expect(response.body.data[0].name).toBe("Test Hotel");
+  expect(response.body.data[1].name).toBe("Second Test Hotel");
   expect(findManyMock).toHaveBeenCalledOnce();
 });
 
@@ -595,6 +680,32 @@ describe("Bookings API", () => {
     vi.clearAllMocks();
   });
 
+  describe("Password policy API", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it.each([
+      ["short", "Aa1!abc"],
+      ["missing uppercase", "strong123!"],
+      ["missing number", "StrongPass!"],
+      ["missing special character", "StrongPass123"],
+    ])("rejects a password that is %s", async (_reason, password) => {
+      const response = await request(app)
+        .post("/api/v1/auth/register")
+        .send({
+          title: "Ms",
+          name: "Test User",
+          email: "test@example.com",
+          password,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain("at least 8 characters");
+      expect(userFindUniqueMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("returns bookings for a specific user", async () => {
     bookingFindManyMock.mockResolvedValue([
       {
@@ -941,4 +1052,3 @@ const response = await request(app)
 });
 
 });
-

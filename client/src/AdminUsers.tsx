@@ -1,6 +1,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE_URL } from "./api";
+import useConfirmDialog from "./components/ConfirmDialog";
+import { ToastMessage } from "./components/ToastNotifications";
 
 type ManagedUser = {
   id: string;
@@ -27,6 +29,7 @@ export default function AdminUsers({
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const { confirm, dialog } = useConfirmDialog();
 
   const loadUsers = useCallback(async () => {
     const token = sessionStorage.getItem("hotelAuthToken");
@@ -64,18 +67,19 @@ export default function AdminUsers({
   }, []);
 
   useEffect(() => {
-    void loadUsers();
+    void Promise.resolve().then(loadUsers);
   }, [loadUsers]);
 
   async function handleRoleChange(user: ManagedUser) {
     const nextRole = user.role === "ADMIN" ? "GUEST" : "ADMIN";
     const action = nextRole === "ADMIN" ? "promote" : "remove administrator access from";
 
-    if (
-      !window.confirm(
-        `Are you sure you want to ${action} ${user.name || user.email}?`,
-      )
-    ) {
+    if (!(await confirm({
+      title: nextRole === "ADMIN" ? "Promote user?" : "Remove administrator access?",
+      message: `Are you sure you want to ${action} ${user.name || user.email}?`,
+      confirmLabel: nextRole === "ADMIN" ? "Make administrator" : "Remove access",
+      destructive: nextRole === "GUEST",
+    }))) {
       return;
     }
 
@@ -141,11 +145,7 @@ export default function AdminUsers({
         {loading ? "Loading users..." : "Refresh Users"}
       </button>
 
-      {error && (
-        <p className="auth-feedback auth-feedback-error" role="alert">
-          {error}
-        </p>
-      )}
+      <ToastMessage message={error} />
 
       {message && (
         <p className="auth-feedback" role="status">
@@ -217,6 +217,7 @@ export default function AdminUsers({
             </article>
           );
         })}
+      {dialog}
     </section>
   );
 }
