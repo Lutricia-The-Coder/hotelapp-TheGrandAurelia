@@ -137,10 +137,10 @@ export default function Header({
         ) : (
           <button
             type="button"
-            className="login-link sign-out-button"
-            onClick={() => setAuthMode("login")}
+            className="header-cta"
+            onClick={() => setAuthMode("register")}
           >
-            Sign in
+            Get Started
           </button>
         )}
 
