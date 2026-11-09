@@ -328,7 +328,9 @@ async function authRequest(
   const result: AuthResponse = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.error || "Something went wrong. Please try again.");
+    throw new Error(
+      result.error || result.message || "Something went wrong. Please try again.",
+    );
   }
 
   return result;
@@ -348,6 +350,17 @@ export async function loginUser(
   password: string,
 ): Promise<AuthResponse> {
   return authRequest("login", { email, password });
+}
+
+export async function requestPasswordReset(email: string): Promise<AuthResponse> {
+  return authRequest("password-reset/request", { email });
+}
+
+export async function completePasswordReset(
+  token: string,
+  password: string,
+): Promise<AuthResponse> {
+  return authRequest("password-reset/complete", { token, password });
 }
 
 export async function checkApiHealth() {

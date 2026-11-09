@@ -33,8 +33,8 @@ model HotelBranch {
   images     String[] @default([])
   coverImage String?
 
-  hotelId            String          @db.Uuid
-  hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId            String           @db.Uuid
+  hotel              Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes          RoomType[]
   favorites          BranchFavorite[]
   reviews            Review[]
@@ -116,11 +116,24 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  bookings  Booking[]
-  reviews   Review[]
-  favorites       Favorite[]
-  branchFavorites BranchFavorite[]
-  role            UserRole   @default(GUEST)
+  bookings            Booking[]
+  reviews             Review[]
+  favorites           Favorite[]
+  branchFavorites     BranchFavorite[]
+  passwordResetTokens PasswordResetToken[]
+  role                UserRole             @default(GUEST)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model HotelImage {

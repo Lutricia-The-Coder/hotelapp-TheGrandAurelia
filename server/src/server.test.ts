@@ -1,5 +1,5 @@
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 const {
@@ -22,6 +22,11 @@ const {
   roomDeleteMock,
   roomFindUniqueMock,
   userFindUniqueMock,
+  userUpdateMock,
+  passwordResetTokenFindUniqueMock,
+  passwordResetTokenCreateMock,
+  passwordResetTokenDeleteManyMock,
+  sendEmailMock,
   bookingFindManyMock,
   bookingCreateMock,
   bookingUpdateMock,
@@ -52,6 +57,11 @@ transactionMock,
   roomDeleteMock: vi.fn(),
   roomFindUniqueMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
+  userUpdateMock: vi.fn(),
+  passwordResetTokenFindUniqueMock: vi.fn(),
+  passwordResetTokenCreateMock: vi.fn(),
+  passwordResetTokenDeleteManyMock: vi.fn(),
+  sendEmailMock: vi.fn(),
   bookingFindManyMock: vi.fn(),
   bookingFindUniqueMock: vi.fn(),
   bookingCreateMock: vi.fn(),
@@ -122,6 +132,12 @@ vi.mock("./lib/prisma.js", () => ({
     },
     user: {
       findUnique: userFindUniqueMock,
+      update: userUpdateMock,
+    },
+    passwordResetToken: {
+      findUnique: passwordResetTokenFindUniqueMock,
+      create: passwordResetTokenCreateMock,
+      deleteMany: passwordResetTokenDeleteManyMock,
     },
     review: {
       findMany: reviewFindManyMock,
@@ -147,8 +163,109 @@ payment: {
   },
 }));
 
+vi.mock("./lib/mailer.js", () => ({
+  sendEmail: sendEmailMock,
+}));
 
 import app from "./app.js";
+
+describe("Password reset API", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.FRONTEND_URL = "http://localhost:5173";
+  });
+
+  afterEach(() => {
+    userFindUniqueMock.mockReset();
+  });
+
+  it("emails a short-lived reset link and changes the password once used", async () => {
+    userFindUniqueMock.mockResolvedValue({
+      id: "user-test-1",
+      email: "test@example.com",
+    });
+    passwordResetTokenDeleteManyMock.mockResolvedValue({ count: 0 });
+    passwordResetTokenCreateMock.mockResolvedValue({ id: "reset-token-1" });
+    sendEmailMock.mockResolvedValue(undefined);
+
+    const requestResponse = await request(app)
+      .post("/api/v1/auth/password-reset/request")
+      .send({ email: " TEST@example.com " });
+
+    expect(requestResponse.status).toBe(200);
+    expect(requestResponse.body.message).toMatch(/if an account exists/i);
+    expect(passwordResetTokenCreateMock).toHaveBeenCalledOnce();
+    const storedHash = passwordResetTokenCreateMock.mock.calls[0][0].data.tokenHash;
+    expect(storedHash).toMatch(/^[a-f0-9]{64}$/);
+
+    const emailText = sendEmailMock.mock.calls[0][0].text as string;
+    const token = emailText.match(/reset_token=([a-f0-9]{64})/)?.[1];
+    expect(token).toBeTruthy();
+    expect(token).not.toBe(storedHash);
+
+    passwordResetTokenFindUniqueMock.mockResolvedValue({
+      userId: "user-test-1",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    });
+    passwordResetTokenDeleteManyMock.mockResolvedValue({ count: 1 });
+    userUpdateMock.mockResolvedValue({ id: "user-test-1" });
+    transactionMock.mockImplementation(
+      async (callback: (transaction: {
+        passwordResetToken: { deleteMany: typeof passwordResetTokenDeleteManyMock };
+        user: { update: typeof userUpdateMock };
+      }) => Promise<unknown>) =>
+        callback({
+          passwordResetToken: { deleteMany: passwordResetTokenDeleteManyMock },
+          user: { update: userUpdateMock },
+        }),
+    );
+
+    const resetResponse = await request(app)
+      .post("/api/v1/auth/password-reset/complete")
+      .send({ token, password: "NewSecure123!" });
+
+    expect(resetResponse.status).toBe(200);
+    expect(resetResponse.body.message).toMatch(/password has been reset/i);
+    expect(userUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "user-test-1" },
+        data: { passwordHash: expect.any(String) },
+      }),
+    );
+    expect(passwordResetTokenDeleteManyMock).toHaveBeenCalledWith({
+      where: { userId: "user-test-1" },
+    });
+
+    passwordResetTokenDeleteManyMock.mockResolvedValue({ count: 0 });
+    const reusedTokenResponse = await request(app)
+      .post("/api/v1/auth/password-reset/complete")
+      .send({ token, password: "AnotherSecure123!" });
+
+    expect(reusedTokenResponse.status).toBe(400);
+    expect(userUpdateMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not reveal whether the requested email has an account", async () => {
+    userFindUniqueMock.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post("/api/v1/auth/password-reset/request")
+      .send({ email: "unknown@example.com" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toMatch(/if an account exists/i);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed or weak reset requests", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/password-reset/complete")
+      .send({ token: "invalid-token", password: "weak" });
+
+    expect(response.status).toBe(400);
+    expect(userUpdateMock).not.toHaveBeenCalled();
+  });
+});
 
 describe("CORS configuration", () => {
   it("allows local Vite requests with credentials", async () => {

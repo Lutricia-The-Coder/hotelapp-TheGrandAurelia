@@ -8,7 +8,12 @@ import {
 } from "react";
 import { ToastMessage } from "./ToastNotifications";
 
-type AuthMode = "login" | "register" | null;
+type AuthMode =
+  | "login"
+  | "register"
+  | "forgot-password"
+  | "reset-password"
+  | null;
 
 type AuthModalProps = {
   authMode: AuthMode;
@@ -61,6 +66,13 @@ export default function AuthModal({
     setAuthMessage("");
     setAuthError("");
   }, [setAuthError, setAuthMessage, setAuthMode]);
+  const isLogin = authMode === "login";
+  const isRegister = authMode === "register";
+  const isForgotPassword = authMode === "forgot-password";
+  const isResetPassword = authMode === "reset-password";
+  const showsEmail = isLogin || isRegister || isForgotPassword;
+  const showsPassword = isLogin || isRegister || isResetPassword;
+  const showsPasswordConfirmation = isRegister || isResetPassword;
 
   useEffect(() => {
     if (authMode === null) return;
@@ -84,7 +96,7 @@ export default function AuthModal({
   return (
     <section
       className={
-        authMode === "register"
+        isRegister
           ? "auth-section auth-register-section"
           : "auth-section"
       }
@@ -95,7 +107,7 @@ export default function AuthModal({
     >
       <div
         className={
-          authMode === "register"
+          isRegister
             ? "auth-card auth-card-register"
             : "auth-card"
         }
@@ -117,21 +129,29 @@ export default function AuthModal({
         </p>
 
         <h2 id="auth-title">
-          {authMode === "login" ? (
+          {isLogin ? (
             <>Welcome <em>back.</em></>
-          ) : (
+          ) : isRegister ? (
             <>Create your <em>account.</em></>
+          ) : isForgotPassword ? (
+            <>Forgot your <em>password?</em></>
+          ) : (
+            <>Choose a new <em>password.</em></>
           )}
         </h2>
 
         <p className="auth-description">
-          {authMode === "login"
+          {isLogin
             ? "Sign in to continue your journey with us."
-            : "Join us and make your next stay special."}
+            : isRegister
+              ? "Join us and make your next stay special."
+              : isForgotPassword
+                ? "Enter your email and we'll send you a password reset link if an account exists."
+                : "Choose a new password for your account."}
         </p>
 
         <form onSubmit={handleAuthSubmit}>
-          {authMode === "register" && (
+          {isRegister && (
             <>
               <label className="auth-label">
                 Title
@@ -165,52 +185,54 @@ export default function AuthModal({
             </>
           )}
 
-          <label className="auth-label">
-            Email address
-            <input
-              type="email"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              autoComplete="email"
-              placeholder="you@example.com"
-              required
-            />
-          </label>
-
-          <label className="auth-label">
-            Password
-            <div className="password-input-wrap">
+          {showsEmail && (
+            <label className="auth-label">
+              Email address
               <input
-                type={showPassword ? "text" : "password"}
-                value={authPassword}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                autoComplete={
-                  authMode === "login" ? "current-password" : "new-password"
-                }
-                placeholder={
-                  authMode === "register"
-                    ? "8+ characters, uppercase, number, symbol"
-                    : "Your password"
-                }
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                autoComplete="email"
+                placeholder="you@example.com"
                 required
               />
-              <button
-                type="button"
-                className="password-visibility-toggle"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((visible) => !visible)}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
-                  <circle cx="12" cy="12" r="3" />
-                  {showPassword && <path d="m4 4 16 16" />}
-                </svg>
-              </button>
-            </div>
-          </label>
+            </label>
+          )}
 
-          {authMode === "register" && (
+          {showsPassword && (
+            <label className="auth-label">
+              {isResetPassword ? "New password" : "Password"}
+              <div className="password-input-wrap">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  placeholder={
+                    isRegister || isResetPassword
+                      ? "8+ characters, uppercase, number, symbol"
+                      : "Your password"
+                  }
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-visibility-toggle"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                    <circle cx="12" cy="12" r="3" />
+                    {showPassword && <path d="m4 4 16 16" />}
+                  </svg>
+                </button>
+              </div>
+            </label>
+          )}
+
+          {showsPasswordConfirmation && (
             <label className="auth-label">
               Confirm password
               <div className="password-input-wrap">
@@ -241,6 +263,20 @@ export default function AuthModal({
             </label>
           )}
 
+          {isLogin && (
+            <button
+              type="button"
+              className="auth-link-button"
+              onClick={() => {
+                setAuthMode("forgot-password");
+                setAuthMessage("");
+                setAuthError("");
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
+
           <ToastMessage message={authError} />
 
           {authMessage && (
@@ -256,44 +292,68 @@ export default function AuthModal({
           >
             {authLoading
               ? "Please wait..."
-              : authMode === "login"
+              : isLogin
                 ? "Sign in"
-                : "Create account"}
+                : isRegister
+                  ? "Create account"
+                  : isForgotPassword
+                    ? "Send reset link"
+                    : "Reset password"}
             {!authLoading && <span>→</span>}
           </button>
         </form>
 
-        <div className="google-auth-divider">
-          <span>or</span>
-        </div>
+        {(isLogin || isRegister) && (
+          <>
+            <div className="google-auth-divider">
+              <span>or</span>
+            </div>
 
-        <a
-          className="google-signin-button"
-          href={`${apiBaseUrl}/auth/google`}
-          aria-label="Continue with Google"
-        >
-          <span className="google-signin-mark" aria-hidden="true">
-            G
-          </span>
-          <span>Continue with Google</span>
-        </a>
+            <a
+              className="google-signin-button"
+              href={`${apiBaseUrl}/auth/google`}
+              aria-label="Continue with Google"
+            >
+              <span className="google-signin-mark" aria-hidden="true">
+                G
+              </span>
+              <span>Continue with Google</span>
+            </a>
+          </>
+        )}
 
-        <p className="auth-switch">
-          {authMode === "login"
-            ? "New to The Grand Aurelia?"
-            : "Already have an account?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode(authMode === "login" ? "register" : "login");
-              setAuthMessage("");
-              setAuthError("");
-              setAuthConfirmPassword("");
-            }}
-          >
-            {authMode === "login" ? "Create account" : "Sign in"}
-          </button>
-        </p>
+        {(isLogin || isRegister) ? (
+          <p className="auth-switch">
+            {isLogin ? "New to The Grand Aurelia?" : "Already have an account?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode(isLogin ? "register" : "login");
+                setAuthMessage("");
+                setAuthError("");
+                setAuthConfirmPassword("");
+              }}
+            >
+              {isLogin ? "Create account" : "Sign in"}
+            </button>
+          </p>
+        ) : (
+          <p className="auth-switch">
+            Remembered your password?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("login");
+                setAuthMessage("");
+                setAuthError("");
+                setAuthPassword("");
+                setAuthConfirmPassword("");
+              }}
+            >
+              Sign in
+            </button>
+          </p>
+        )}
       </div>
     </section>
   );

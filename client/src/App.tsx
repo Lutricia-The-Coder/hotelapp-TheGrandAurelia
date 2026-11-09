@@ -16,7 +16,8 @@ import BranchStayPage from "./pages/BranchStayPage";
 import BookingPage from "./pages/BookingPage";
 import {
 API_BASE_URL,changeMyPassword,createBooking,getPaymentStatus,cancelPendingCheckout,
-  getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
+  getUserBookings, cancelBooking,loginUser,registerUser,requestPasswordReset,
+  completePasswordReset,getAdminBookings,
 updateAdminBookingStatus, modifyAdminBooking,getFavoriteBranches, addFavoriteBranch,removeFavoriteBranch,getHotelReviews,getBranchReviews,submitBranchReview,type HotelReviewsResponse,type AdminBooking,type FavoriteBranch,type AuthUser,getMyProfile,
 updateMyProfile,
 type UserProfile,} from "./api";
@@ -417,7 +418,9 @@ const [selectedRoomAmenityIds, setSelectedRoomAmenityIds] = useState<string[]>([
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
+  const [authMode, setAuthMode] = useState<
+    "login" | "register" | "forgot-password" | "reset-password" | null
+  >(null);
   const dispatch = useDispatch<AppDispatch>();
 
 const authUser = useSelector(
@@ -432,6 +435,7 @@ const [authEmail, setAuthEmail] = useState("");
 const [authTitle, setAuthTitle] = useState("");
 const [authConfirmPassword, setAuthConfirmPassword] = useState("");
 const [authPassword, setAuthPassword] = useState("");
+const [authResetToken, setAuthResetToken] = useState("");
 const [authMessage, setAuthMessage] = useState("");
 const [authError, setAuthError] = useState("");
 const [authLoading, setAuthLoading] = useState(false);
@@ -1095,7 +1099,10 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   setAuthMessage("");
   setAuthError("");
 
-  if (authMode === "register" && !meetsPasswordPolicy(authPassword)) {
+  if (
+    (authMode === "register" || authMode === "reset-password") &&
+    !meetsPasswordPolicy(authPassword)
+  ) {
     setAuthError(PASSWORD_POLICY_MESSAGE);
     return;
   }
@@ -1103,7 +1110,22 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   setAuthLoading(true);
 
   try {
-    if (authMode === "register") {
+    if (authMode === "forgot-password") {
+      const result = await requestPasswordReset(authEmail.trim());
+      setAuthMessage(result.message);
+    } else if (authMode === "reset-password") {
+      if (authPassword !== authConfirmPassword) {
+        setAuthError("Your passwords do not match. Please try again.");
+        return;
+      }
+
+      const result = await completePasswordReset(authResetToken, authPassword);
+      setAuthMessage(result.message);
+      setAuthMode("login");
+      setAuthResetToken("");
+      setAuthPassword("");
+      setAuthConfirmPassword("");
+    } else if (authMode === "register") {
       if (authPassword !== authConfirmPassword) {
   setAuthError("Your passwords do not match. Please try again.");
   setAuthLoading(false);
@@ -1402,6 +1424,21 @@ useEffect(() => {
   const hashParams = new URLSearchParams(
     currentUrl.hash.replace(/^#/, ""),
   );
+
+  const resetToken = hashParams.get("reset_token");
+  if (resetToken) {
+    currentUrl.hash = "";
+    window.history.replaceState(
+      {},
+      document.title,
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+    setAuthResetToken(resetToken);
+    setAuthMode("reset-password");
+    setAuthMessage("");
+    setAuthError("");
+    return;
+  }
 
   const token = hashParams.get("google_token");
   const userJson = hashParams.get("google_user");

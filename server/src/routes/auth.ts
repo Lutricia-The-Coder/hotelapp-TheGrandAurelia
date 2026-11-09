@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { sendEmail } from "../lib/mailer.js";
 import {
   requireAuth,
   type AuthenticatedRequest,
@@ -286,6 +287,126 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       error: "Unable to log in right now.",
     });
+  }
+});
+
+router.post("/password-reset/request", async (req, res) => {
+  const genericMessage =
+    "If an account exists for that email, a password reset link will be sent.";
+
+  try {
+    const email = req.body?.email;
+    if (typeof email !== "string" || !email.trim()) {
+      res.status(400).json({ message: "A valid email address is required." });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true, email: true },
+    });
+
+    if (user) {
+      const rawToken = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+      await prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id },
+      });
+      await prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      const frontendUrl = process.env.FRONTEND_URL?.trim() || "http://localhost:5173";
+      const resetUrl = new URL("/", frontendUrl);
+      resetUrl.hash = new URLSearchParams({ reset_token: rawToken }).toString();
+
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: "Reset your Grand Aurelia password",
+          text: `Use this link to reset your password. It expires in 30 minutes:\n\n${resetUrl.toString()}\n\nIf you did not request this, you can ignore this email.`,
+          html: `<p>Use the link below to reset your password. It expires in 30 minutes.</p><p><a href="${resetUrl.toString()}">Reset your password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+        });
+      } catch (error) {
+        await prisma.passwordResetToken.deleteMany({
+          where: { tokenHash },
+        });
+        throw error;
+      }
+    }
+
+    res.status(200).json({ message: genericMessage });
+  } catch (error) {
+    console.error("Password reset request failed:", error);
+    res.status(500).json({
+      message: "Unable to send a password reset email right now.",
+    });
+  }
+});
+
+router.post("/password-reset/complete", async (req, res) => {
+  try {
+    const { token, password } = req.body ?? {};
+
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
+      res.status(400).json({
+        message: "This password reset link is invalid or has expired.",
+      });
+      return;
+    }
+
+    if (typeof password !== "string" || !meetsPasswordPolicy(password)) {
+      res.status(400).json({ message: PASSWORD_POLICY_MESSAGE });
+      return;
+    }
+
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true, expiresAt: true },
+    });
+
+    if (!resetToken || resetToken.expiresAt <= new Date()) {
+      res.status(400).json({
+        message: "This password reset link is invalid or has expired.",
+      });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const resetComplete = await prisma.$transaction(async (transaction) => {
+      const consumedToken = await transaction.passwordResetToken.deleteMany({
+        where: {
+          tokenHash,
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (consumedToken.count !== 1) return false;
+
+      await transaction.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      });
+      await transaction.passwordResetToken.deleteMany({
+        where: { userId: resetToken.userId },
+      });
+      return true;
+    });
+
+    if (!resetComplete) {
+      res.status(400).json({
+        message: "This password reset link is invalid or has expired.",
+      });
+      return;
+    }
+
+    res.status(200).json({ message: "Your password has been reset. Please sign in." });
+  } catch (error) {
+    console.error("Password reset completion failed:", error);
+    res.status(500).json({ message: "Unable to reset your password right now." });
   }
 });
 

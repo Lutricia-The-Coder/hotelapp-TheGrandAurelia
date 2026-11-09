@@ -1150,6 +1150,22 @@ p {
   color: #356b46;
 }
 
+.auth-link-button {
+  display: block;
+  margin: -4px 0 16px auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #967543;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-link-button:hover {
+  text-decoration: underline;
+}
+
 .auth-switch {
   margin-top: 24px;
   color: #777064;
