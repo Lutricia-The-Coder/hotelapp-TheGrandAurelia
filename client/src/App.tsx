@@ -1109,17 +1109,31 @@ async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
   setAuthLoading(false);
   return;
 }
-      const result = await registerUser(
-      
+      await registerUser(
         authName.trim(),
         authEmail.trim(),
         authPassword,
-          authTitle,
+        authTitle,
       );
 
-      setAuthMessage(result.message);
-      setAuthMode("login");
+      const result = await loginUser(authEmail.trim(), authPassword);
+      if (!result.token || !result.user) {
+        throw new Error("Account created, but sign-in failed. Please sign in.");
+      }
+
+      sessionStorage.setItem("hotelAuthToken", result.token);
+      sessionStorage.setItem("hotelAuthUser", JSON.stringify(result.user));
+      dispatch(clearBookings());
+      setFavoriteBranches([]);
+      setFavoriteBranchIds([]);
+      dispatch(setUser(result.user));
+      setAdminPortalOpen(false);
+      setGuestPage("discover");
+      setAuthMessage("");
+      setAuthError("");
+      setAuthMode(null);
       setAuthPassword("");
+      setAuthConfirmPassword("");
     } else if (authMode === "login") {
       const result = await loginUser(authEmail.trim(), authPassword);
 
