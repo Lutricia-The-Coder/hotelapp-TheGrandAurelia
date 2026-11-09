@@ -17,7 +17,7 @@ import BookingPage from "./pages/BookingPage";
 import {
 API_BASE_URL,changeMyPassword,createBooking,getPaymentStatus,cancelPendingCheckout,
   getUserBookings, cancelBooking,loginUser,registerUser,getAdminBookings,
-updateAdminBookingStatus, modifyAdminBooking,getFavoriteBranches, addFavoriteBranch,removeFavoriteBranch,getHotelReviews,submitHotelReview,type HotelReviewsResponse,type AdminBooking,type FavoriteBranch,type AuthUser,getMyProfile,
+updateAdminBookingStatus, modifyAdminBooking,getFavoriteBranches, addFavoriteBranch,removeFavoriteBranch,getHotelReviews,getBranchReviews,submitBranchReview,type HotelReviewsResponse,type AdminBooking,type FavoriteBranch,type AuthUser,getMyProfile,
 updateMyProfile,
 type UserProfile,} from "./api";
 import "./index.css";
@@ -979,6 +979,29 @@ async function handleLoadHotelReviews(hotelId: string) {
   }
 }
 
+async function handleLoadBranchReviews(branchId: string) {
+  setReviewsLoadingHotelId(branchId);
+  setReviewErrors((previous) => ({ ...previous, [branchId]: "" }));
+
+  try {
+    const result = await getBranchReviews(branchId);
+
+    setHotelReviews((previous) => ({
+      ...previous,
+      [branchId]: result,
+    }));
+  } catch (err) {
+    setReviewErrors((previous) => ({
+      ...previous,
+      [branchId]: err instanceof Error
+        ? err.message
+        : "Failed to load branch reviews.",
+    }));
+  } finally {
+    setReviewsLoadingHotelId(null);
+  }
+}
+
 async function handleShareHotel(hotel: Hotel) {
   const url = `${window.location.origin}${window.location.pathname}#destinations`;
 
@@ -1014,7 +1037,7 @@ async function handleShareHotel(hotel: Hotel) {
   }
 }
 
-async function handleSubmitHotelReview(hotelId: string) {
+async function handleSubmitBranchReview(branchId: string) {
   const token = sessionStorage.getItem("hotelAuthToken");
 
   if (!token) {
@@ -1027,33 +1050,33 @@ async function handleSubmitHotelReview(hotelId: string) {
     return;
   }
 
-  setReviewSubmittingHotelId(hotelId);
-  setReviewErrors((previous) => ({ ...previous, [hotelId]: "" }));
-  setReviewMessages((previous) => ({ ...previous, [hotelId]: "" }));
+  setReviewSubmittingHotelId(branchId);
+  setReviewErrors((previous) => ({ ...previous, [branchId]: "" }));
+  setReviewMessages((previous) => ({ ...previous, [branchId]: "" }));
 
   try {
-    await submitHotelReview(
-      hotelId,
-      reviewRatings[hotelId] ?? 5,
-      reviewComments[hotelId] ?? "",
+    await submitBranchReview(
+      branchId,
+      reviewRatings[branchId] ?? 5,
+      reviewComments[branchId] ?? "",
       token,
     );
 
-    const result = await getHotelReviews(hotelId);
+    const result = await getBranchReviews(branchId);
 
     setHotelReviews((previous) => ({
       ...previous,
-      [hotelId]: result,
+      [branchId]: result,
     }));
 
     setReviewMessages((previous) => ({
       ...previous,
-      [hotelId]: "Your review has been saved.",
+      [branchId]: "Your review has been saved.",
     }));
   } catch (err) {
     setReviewErrors((previous) => ({
       ...previous,
-      [hotelId]: err instanceof Error
+      [branchId]: err instanceof Error
         ? err.message
         : "Failed to save your review.",
     }));
@@ -2062,7 +2085,7 @@ const prices = hotelBranches
    branch={selectedStay.branch}
    rooms={rooms[selectedStay.branch.id] ?? []}
    favorite={favoriteBranchIds.includes(selectedStay.branch.id)}
-   rating={hotelReviews[selectedStay.hotel.id]?.averageRating ?? null}
+   rating={hotelReviews[selectedStay.branch.id]?.averageRating ?? null}
    onBack={() => navigateGuestPage("discover")}
    onToggleFavorite={() => void handleToggleFavorite(selectedStay.branch)}
    onBookRoom={handleBookStayRoom}
@@ -2104,8 +2127,8 @@ const prices = hotelBranches
   reviewComments={reviewComments}
   setReviewComments={setReviewComments}
   reviewSubmittingHotelId={reviewSubmittingHotelId}
-  handleLoadHotelReviews={handleLoadHotelReviews}
-  handleSubmitHotelReview={handleSubmitHotelReview}
+  handleLoadBranchReviews={handleLoadBranchReviews}
+  handleSubmitBranchReview={handleSubmitBranchReview}
   selectedRoomAmenityIds={selectedRoomAmenityIds}
   setSelectedRoomAmenityIds={setSelectedRoomAmenityIds}
   setBookingRoom={setBookingRoom}

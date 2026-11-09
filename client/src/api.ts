@@ -694,14 +694,30 @@ export async function getHotelReviews(
   return result;
 }
 
-export async function submitHotelReview(
-  hotelId: string,
+export async function getBranchReviews(
+  branchId: string,
+): Promise<HotelReviewsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/reviews/branch/${encodeURIComponent(branchId)}`,
+  );
+
+  const result: HotelReviewsResponse = await response.json();
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || "Failed to load branch reviews.");
+  }
+
+  return result;
+}
+
+export async function submitBranchReview(
+  branchId: string,
   rating: number,
   comment: string,
   token: string,
 ): Promise<HotelReview> {
   const response = await fetch(
-    `${API_BASE_URL}/reviews/hotel/${encodeURIComponent(hotelId)}`,
+    `${API_BASE_URL}/reviews/branch/${encodeURIComponent(branchId)}`,
     {
       method: "POST",
       headers: {
@@ -724,4 +740,3 @@ export async function submitHotelReview(
 
   return result.data;
 }
-

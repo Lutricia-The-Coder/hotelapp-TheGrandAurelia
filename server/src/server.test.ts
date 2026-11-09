@@ -30,6 +30,8 @@ const {
     bookingAggregateMock,
     paymentCreateMock,
 transactionMock,
+    reviewFindManyMock,
+    reviewUpsertMock,
 } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
   findUniqueMock: vi.fn(),
@@ -58,6 +60,8 @@ transactionMock,
   bookingAggregateMock: vi.fn(),
   paymentCreateMock: vi.fn(),
 transactionMock: vi.fn(),
+  reviewFindManyMock: vi.fn(),
+  reviewUpsertMock: vi.fn(),
 }));
 const TEST_JWT_SECRET = "test-only-secret-for-booking-tests";
 
@@ -118,6 +122,10 @@ vi.mock("./lib/prisma.js", () => ({
     },
     user: {
       findUnique: userFindUniqueMock,
+    },
+    review: {
+      findMany: reviewFindManyMock,
+      upsert: reviewUpsertMock,
     },
     booking: {
       findMany: bookingFindManyMock,
@@ -1051,4 +1059,63 @@ const response = await request(app)
   expect(bookingUpdateMock).not.toHaveBeenCalled();
 });
 
+});
+
+describe("Branch reviews API", () => {
+  const branchId = "50cb4a8d-4c79-4f34-8894-2a6ca1214c99";
+  const hotelId = "f98c742f-6cec-4cf5-b8bd-60af5796ce9a";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns reviews for only the requested branch", async () => {
+    branchFindUniqueMock.mockResolvedValue({ id: branchId });
+    reviewFindManyMock.mockResolvedValue([
+      { id: "review-1", rating: 5, user: { id: "user-1", name: "Guest" } },
+    ]);
+
+    const response = await request(app).get(
+      `/api/v1/reviews/branch/${branchId}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(reviewFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { branchId } }),
+    );
+    expect(response.body.count).toBe(1);
+    expect(response.body.averageRating).toBe(5);
+  });
+
+  it("creates or updates a review for the selected branch only", async () => {
+    userFindUniqueMock.mockResolvedValue({
+      id: "user-test-1",
+      role: "GUEST",
+    });
+    branchFindUniqueMock.mockResolvedValue({ id: branchId, hotelId });
+    reviewUpsertMock.mockResolvedValue({
+      id: "review-1",
+      rating: 4,
+      comment: "Lovely stay",
+      user: { id: "user-test-1", name: "Guest" },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/reviews/branch/${branchId}`)
+      .set(authHeader())
+      .send({ rating: 4, comment: "Lovely stay" });
+
+    expect(response.status).toBe(200);
+    expect(reviewUpsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_branchId: {
+            userId: "user-test-1",
+            branchId,
+          },
+        },
+        create: expect.objectContaining({ hotelId, branchId }),
+      }),
+    );
+  });
 });

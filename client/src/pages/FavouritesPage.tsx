@@ -87,7 +87,7 @@ export default function FavouritesPage({
             const startingPrice = branchRooms.length
               ? Math.min(...branchRooms.map((room) => Number(room.pricePerNight)))
               : null;
-            const rating = hotelReviews[hotel.id]?.averageRating;
+            const rating = hotelReviews[branch.id]?.averageRating;
             const photo =
               branch.coverImage ||
               branch.images?.[0] ||

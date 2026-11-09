@@ -13,8 +13,68 @@ const isUuid = (value: string) =>
     value,
   );
 
+// GET /api/v1/reviews/branch/:branchId
+// Public: view reviews for a branch.
+router.get("/branch/:branchId", async (req, res) => {
+  try {
+    const branchId = req.params.branchId;
+
+    if (typeof branchId !== "string" || !isUuid(branchId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid branch ID.",
+      });
+      return;
+    }
+
+    const branch = await prisma.hotelBranch.findUnique({
+      where: { id: branchId },
+      select: { id: true },
+    });
+
+    if (!branch) {
+      res.status(404).json({
+        success: false,
+        message: "Branch not found.",
+      });
+      return;
+    }
+
+    const reviews = await prisma.review.findMany({
+      where: { branchId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const averageRating = reviews.length
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) /
+        reviews.length
+      : null;
+
+    res.status(200).json({
+      success: true,
+      count: reviews.length,
+      averageRating,
+      data: reviews,
+    });
+  } catch (error) {
+    console.error("Failed to load branch reviews:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to load branch reviews.",
+    });
+  }
+});
+
 // GET /api/v1/reviews/hotel/:hotelId
-// Public: view reviews for a hotel.
+// Public: view all reviews associated with a hotel (used by the admin view).
 router.get("/hotel/:hotelId", async (req, res) => {
   try {
     const hotelId = req.params.hotelId;
@@ -73,20 +133,20 @@ router.get("/hotel/:hotelId", async (req, res) => {
   }
 });
 
-// POST /api/v1/reviews/hotel/:hotelId
-// Authenticated: create or update the current user's review.
+// POST /api/v1/reviews/branch/:branchId
+// Authenticated: create or update the current user's review for a branch.
 router.post(
-  "/hotel/:hotelId",
+  "/branch/:branchId",
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const hotelId = req.params.hotelId;
+      const branchId = req.params.branchId;
       const { rating, comment } = req.body ?? {};
 
-      if (typeof hotelId !== "string" || !isUuid(hotelId)) {
+      if (typeof branchId !== "string" || !isUuid(branchId)) {
         res.status(400).json({
           success: false,
-          message: "Invalid hotel ID.",
+          message: "Invalid branch ID.",
         });
         return;
       }
@@ -111,15 +171,15 @@ router.post(
         return;
       }
 
-      const hotel = await prisma.hotel.findUnique({
-        where: { id: hotelId },
-        select: { id: true },
+      const branch = await prisma.hotelBranch.findUnique({
+        where: { id: branchId },
+        select: { id: true, hotelId: true },
       });
 
-      if (!hotel) {
+      if (!branch) {
         res.status(404).json({
           success: false,
-          message: "Hotel not found.",
+          message: "Branch not found.",
         });
         return;
       }
@@ -129,9 +189,9 @@ router.post(
 
       const review = await prisma.review.upsert({
         where: {
-          userId_hotelId: {
+          userId_branchId: {
             userId: req.user!.id,
-            hotelId,
+            branchId,
           },
         },
         update: {
@@ -140,7 +200,8 @@ router.post(
         },
         create: {
           userId: req.user!.id,
-          hotelId,
+          hotelId: branch.hotelId,
+          branchId,
           rating,
           comment: normalizedComment,
         },
@@ -160,14 +221,13 @@ router.post(
         data: review,
       });
     } catch (error) {
-      console.error("Failed to save review:", error);
+      console.error("Failed to save branch review:", error);
       res.status(500).json({
         success: false,
-        message: "Failed to save review.",
+        message: "Failed to save branch review.",
       });
     }
   },
 );
 
 export default router;
-

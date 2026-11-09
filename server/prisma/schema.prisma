@@ -37,6 +37,7 @@ model HotelBranch {
   hotel              Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomTypes          RoomType[]
   favorites          BranchFavorite[]
+  reviews            Review[]
   checkInTime        String?
   checkOutTime       String?
   cancellationPolicy String?
@@ -180,8 +181,12 @@ model Review {
   hotelId String @db.Uuid
   hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, hotelId])
+  branchId String?      @db.Uuid
+  branch   HotelBranch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
   @@index([hotelId])
+  @@index([branchId])
 }
 
 model Favorite {

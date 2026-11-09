@@ -51,8 +51,8 @@ type DiscoverPageProps = {
   reviewComments: Record<string, string>;
   setReviewComments: Dispatch<SetStateAction<Record<string, string>>>;
   reviewSubmittingHotelId: string | null;
-  handleLoadHotelReviews: (hotelId: string) => Promise<void>;
-  handleSubmitHotelReview: (hotelId: string) => Promise<void>;
+  handleLoadBranchReviews: (branchId: string) => Promise<void>;
+  handleSubmitBranchReview: (branchId: string) => Promise<void>;
   selectedRoomAmenityIds: string[];
   setSelectedRoomAmenityIds: Dispatch<SetStateAction<string[]>>;
   setBookingRoom: Dispatch<SetStateAction<RoomType | null>>;
@@ -101,8 +101,8 @@ export default function DiscoverPage({
   reviewComments,
   setReviewComments,
   reviewSubmittingHotelId,
-  handleLoadHotelReviews,
-  handleSubmitHotelReview,
+  handleLoadBranchReviews,
+  handleSubmitBranchReview,
   selectedRoomAmenityIds,
   setSelectedRoomAmenityIds,
   setBookingRoom,
@@ -375,7 +375,7 @@ export default function DiscoverPage({
               const branchLowestPrice = branchRooms.length
                 ? Math.min(...branchRooms.map((room) => room.pricePerNight))
                 : null;
-              const branchRating = hotelReviews[hotel.id]?.averageRating;
+              const branchRating = hotelReviews[branch.id]?.averageRating;
 
               return (
               <article className="destination-card branch-feature-card" key={branch.id} id={`branch-${branch.id}`}>
@@ -500,10 +500,10 @@ export default function DiscoverPage({
                             ...previous,
                             [branch.id]: true,
                           }));
-                          void handleLoadHotelReviews(hotel.id);
+                          void handleLoadBranchReviews(branch.id);
                         }
                       }}
-                      disabled={reviewsLoadingHotelId === hotel.id}
+                      disabled={reviewsLoadingHotelId === branch.id}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
@@ -521,15 +521,15 @@ export default function DiscoverPage({
 <div className="hotel-reviews">
   {reviewsOpen[branch.id] && (
     <div className="hotel-reviews-panel">
-      {reviewErrors[hotel.id] && (
-        <ToastMessage message={reviewErrors[hotel.id]} />
+      {reviewErrors[branch.id] && (
+        <ToastMessage message={reviewErrors[branch.id]} />
       )}
 
-      {reviewMessages[hotel.id] && (
-        <p role="status">{reviewMessages[hotel.id]}</p>
+      {reviewMessages[branch.id] && (
+        <p role="status">{reviewMessages[branch.id]}</p>
       )}
 
-      {hotelReviews[hotel.id]?.data.map((review) => (
+      {hotelReviews[branch.id]?.data.map((review) => (
         <article key={review.id} className="hotel-review-card">
           <p>
             <strong>{review.user.name || "Guest"}</strong>
@@ -546,24 +546,24 @@ export default function DiscoverPage({
         </article>
       ))}
 
-      {hotelReviews[hotel.id]?.count === 0 && (
+      {hotelReviews[branch.id]?.count === 0 && (
         <p>No reviews yet. Be the first to share your experience.</p>
       )}
 
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void handleSubmitHotelReview(hotel.id);
+          void handleSubmitBranchReview(branch.id);
         }}
       >
         <label>
           Your rating
           <select
-            value={reviewRatings[hotel.id] ?? 5}
+            value={reviewRatings[branch.id] ?? 5}
             onChange={(event) =>
               setReviewRatings((previous) => ({
                 ...previous,
-                [hotel.id]: Number(event.target.value),
+                [branch.id]: Number(event.target.value),
               }))
             }
           >
@@ -580,11 +580,11 @@ export default function DiscoverPage({
           <textarea
             rows={3}
             maxLength={2000}
-            value={reviewComments[hotel.id] ?? ""}
+            value={reviewComments[branch.id] ?? ""}
             onChange={(event) =>
               setReviewComments((previous) => ({
                 ...previous,
-                [hotel.id]: event.target.value,
+                [branch.id]: event.target.value,
               }))
             }
             placeholder="Share your experience..."
@@ -594,9 +594,9 @@ export default function DiscoverPage({
         <button
           type="submit"
           className="room-book-button"
-          disabled={reviewSubmittingHotelId === hotel.id}
+          disabled={reviewSubmittingHotelId === branch.id}
         >
-          {reviewSubmittingHotelId === hotel.id
+          {reviewSubmittingHotelId === branch.id
             ? "Submitting..."
             : "Submit Review"}
         </button>
