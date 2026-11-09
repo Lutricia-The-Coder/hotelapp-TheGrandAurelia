@@ -16,7 +16,12 @@ import { fileURLToPath } from "node:url";
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://hotelapp-the-grand-aurelia.vercel.app",
+    credentials: true,
+  }),
+);
 const uploadsDirectory = fileURLToPath(
   new URL("../uploads/", import.meta.url),
 );
