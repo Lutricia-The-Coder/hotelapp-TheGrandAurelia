@@ -2,6 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import type { HotelReviewsResponse } from "../api";
 import { getBranchPhotos, getBranchPhotoUrl } from "../utils/branchPhotos";
+import { normalizeSearchText } from "../utils/search";
 import { ToastMessage } from "../components/ToastNotifications";
 
 type BranchPhoto = {
@@ -126,10 +127,11 @@ export default function DiscoverPage({
   const featuredBranches = filteredHotels.flatMap((hotel) =>
     (branches[hotel.id] ?? [])
       .filter((branch) => {
-        const search = `${hotel.name} ${hotel.description ?? ""} ${branch.name} ${branch.address} ${branch.city} ${branch.country}`
-          .toLowerCase();
-        const term = hotelSearch.trim().toLowerCase();
-        const location = locationSearch.trim().toLowerCase();
+        const search = normalizeSearchText(
+          `${hotel.name} ${hotel.description ?? ""} ${branch.name} ${branch.address} ${branch.city} ${branch.country}`,
+        );
+        const term = normalizeSearchText(hotelSearch);
+        const location = normalizeSearchText(locationSearch);
         const branchRooms = rooms[branch.id] ?? [];
         const min = minNightlyPrice === "" ? null : Number(minNightlyPrice);
         const max = maxNightlyPrice === "" ? null : Number(maxNightlyPrice);
@@ -145,9 +147,9 @@ export default function DiscoverPage({
         return (
           (!term || search.includes(term)) &&
           (!location ||
-            `${hotel.name} ${branch.name} ${branch.address} ${branch.city} ${branch.country}`
-              .toLowerCase()
-              .includes(location)) &&
+            normalizeSearchText(
+              `${hotel.name} ${branch.name} ${branch.address} ${branch.city} ${branch.country}`,
+            ).includes(location)) &&
           matchesPrice
         );
       })

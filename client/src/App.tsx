@@ -31,6 +31,7 @@ import { ToastMessage } from "./components/ToastNotifications";
 import { setBookings,setBookingsLoading,setBookingsError,setBookingConfirmation, updateBookingStatus, clearBookings,} from "./store/bookingSlice";
 import "./redesign.css";
 import { meetsPasswordPolicy, PASSWORD_POLICY_MESSAGE } from "./utils/passwordPolicy";
+import { normalizeSearchText } from "./utils/search";
 
 type AdminPage =
   | "dashboard"
@@ -1790,35 +1791,34 @@ useEffect(() => {
 ).sort((a, b) => a.name.localeCompare(b.name));
 const filteredHotels = hotels.filter((hotel) => {
   const hotelBranches = branches[hotel.id] ?? [];
-  const search = hotelSearch.trim().toLowerCase();
-  const location = locationSearch.trim().toLowerCase();
+  const search = normalizeSearchText(hotelSearch);
+  const location = normalizeSearchText(locationSearch);
 
   const matchesSearch =
     !search ||
-    [
-      hotel.name,
-      hotel.description ?? "",
-      ...hotelBranches.flatMap((branch) => [
-        branch.name,
-        branch.address,
-        branch.city,
-        branch.country,
-        ...(rooms[branch.id] ?? []).flatMap((room) => [
-          room.name,
-          room.description ?? "",
+    normalizeSearchText(
+      [
+        hotel.name,
+        hotel.description ?? "",
+        ...hotelBranches.flatMap((branch) => [
+          branch.name,
+          branch.address,
+          branch.city,
+          branch.country,
+          ...(rooms[branch.id] ?? []).flatMap((room) => [
+            room.name,
+            room.description ?? "",
+          ]),
         ]),
-      ]),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(search);
+      ].join(" "),
+    ).includes(search);
 
   const matchesLocation =
     !location ||
-    hotel.name.toLowerCase().includes(location) ||
+    normalizeSearchText(hotel.name).includes(location) ||
     hotelBranches.some((branch) =>
       [branch.name, branch.address, branch.city, branch.country].some(
-        (value) => value.toLowerCase().includes(location),
+        (value) => normalizeSearchText(value).includes(location),
       ),
     );
 
