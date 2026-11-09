@@ -34,7 +34,7 @@ const upload = multer({
   },
 });
 
-export const uploadBranchPhotos: RequestHandler = (
+const handlePhotoUpload: RequestHandler = (
   req,
   res,
   next,
@@ -80,3 +80,6 @@ export const uploadBranchPhotos: RequestHandler = (
     next(error);
   });
 };
+
+export const uploadBranchPhotos = handlePhotoUpload;
+export const uploadRoomPhotos = handlePhotoUpload;

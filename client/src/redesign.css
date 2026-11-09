@@ -842,7 +842,25 @@ textarea {
 }
 
 .room-photo {
+  position: relative;
   min-height: 220px;
+}
+
+.room-photo-image {
+  position: absolute;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+}
+
+.room-photo-overlay {
+  z-index: 2;
+}
+
+.room-category {
+  z-index: 3;
 }
 
 .room-card {
@@ -1468,6 +1486,22 @@ textarea {
   background: #fff;
 }
 
+.stay-room-photo-gallery {
+  display: flex;
+  max-width: 45%;
+  flex: 0 1 45%;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.stay-room-photo {
+  width: 130px;
+  height: 110px;
+  flex: 0 0 130px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
 .stay-room-category {
   margin: 0 0 7px;
   color: #a37a36;
@@ -1615,6 +1649,18 @@ textarea {
   .stay-room-card {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .stay-room-photo-gallery {
+    width: 100%;
+    max-width: 100%;
+    flex-basis: auto;
+  }
+
+  .stay-room-photo {
+    width: 100%;
+    height: 180px;
+    flex-basis: min(100%, 260px);
   }
 
   .stay-room-price {
@@ -1855,6 +1901,56 @@ textarea {
 .admin-accommodation small {
   color: #78858c;
   font-size: 10px;
+}
+
+.admin-room-photo-upload {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.admin-room-photo-upload > p {
+  margin: 0;
+  color: #78858c;
+  font-size: 10px;
+}
+
+.admin-room-photo-upload > label {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  color: var(--color-navy);
+  font-size: 11px;
+}
+
+.admin-room-photo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-room-photo-list > div {
+  display: grid;
+  width: 100px;
+  gap: 5px;
+}
+
+.admin-room-photo-list img {
+  width: 100px;
+  height: 72px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.admin-room-photo-list button {
+  justify-self: start;
+  padding: 4px 7px;
+  border: 1px solid #e7ebed;
+  border-radius: 4px;
+  background: #fff;
+  color: #687880;
+  cursor: pointer;
+  font-size: 9px;
 }
 
 .admin-feedback {

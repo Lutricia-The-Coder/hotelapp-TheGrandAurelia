@@ -37,6 +37,7 @@ type RoomRecord = {
       name: string;
     };
   }[];
+  images?: string[];
 };
 type RoomTypeOptionRecord = {
   id: string;
@@ -53,6 +54,7 @@ type AmenityRecord = {
   };
 };
 type PendingBranchPhoto = { file: File; previewUrl: string; };
+type PendingRoomPhoto = { file: File; previewUrl: string; };
 
 type BranchRecord = {
   id: string;
@@ -201,8 +203,20 @@ const [editingAmenityId, setEditingAmenityId] = useState<string | null>(null);
   const [existingBranchImages, setExistingBranchImages] = useState<string[]>([]);
   const [pendingBranchPhotos, setPendingBranchPhotos] = useState<PendingBranchPhoto[]>([]);
   const [coverImageSelection, setCoverImageSelection] = useState("");
+  const [existingRoomImages, setExistingRoomImages] = useState<string[]>([]);
+  const [pendingRoomPhotos, setPendingRoomPhotos] = useState<PendingRoomPhoto[]>([]);
+  const pendingRoomPhotosRef = useRef<PendingRoomPhoto[]>([]);
   const branchFormRef = useRef<HTMLFormElement>(null);
   const { confirm, dialog } = useConfirmDialog();
+
+  useEffect(
+    () => () => {
+      pendingRoomPhotosRef.current.forEach((photo) =>
+        URL.revokeObjectURL(photo.previewUrl),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!branchForm.hotelId) return;
@@ -215,6 +229,93 @@ const [editingAmenityId, setEditingAmenityId] = useState<string | null>(null);
     setExistingBranchImages([]);
     setPendingBranchPhotos([]);
     setCoverImageSelection("");
+  }
+
+  function updatePendingRoomPhotos(photos: PendingRoomPhoto[]) {
+    pendingRoomPhotosRef.current = photos;
+    setPendingRoomPhotos(photos);
+  }
+
+  function clearRoomPhotoSelection() {
+    pendingRoomPhotosRef.current.forEach((photo) =>
+      URL.revokeObjectURL(photo.previewUrl),
+    );
+    pendingRoomPhotosRef.current = [];
+    setExistingRoomImages([]);
+    setPendingRoomPhotos([]);
+  }
+
+  function startNewRoom(branchId: string) {
+    clearRoomPhotoSelection();
+    setRoomForm(newRoomForm(branchId));
+    clearFeedback();
+  }
+
+  function editRoom(room: RoomRecord, branchId: string) {
+    clearRoomPhotoSelection();
+    setExistingRoomImages(room.images ?? []);
+    setRoomForm({
+      id: room.id,
+      branchId,
+      roomTypeOptionId: room.roomTypeOptionId,
+      description: room.description || "",
+      capacity: String(room.capacity),
+      pricePerNight: String(room.pricePerNight),
+      totalRooms: String(room.totalRooms),
+      amenityIds: room.amenities?.map((item) => item.amenityId) ?? [],
+    });
+    clearFeedback();
+  }
+
+  function handleRoomPhotoSelection(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (selectedFiles.length === 0) return;
+
+    const availableSlots =
+      8 - existingRoomImages.length - pendingRoomPhotos.length;
+    if (availableSlots <= 0) {
+      setError("A room type can have a maximum of 8 photos.");
+      return;
+    }
+
+    const acceptedPhotos: PendingRoomPhoto[] = [];
+    for (const file of selectedFiles) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        setError("Only JPG, PNG and WEBP images are allowed.");
+        break;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Each photo must be 5 MB or smaller.");
+        break;
+      }
+      if (acceptedPhotos.length >= availableSlots) {
+        setError("A room type can have a maximum of 8 photos.");
+        break;
+      }
+      acceptedPhotos.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+
+    if (acceptedPhotos.length > 0) {
+      updatePendingRoomPhotos([...pendingRoomPhotos, ...acceptedPhotos]);
+    }
+  }
+
+  function removeExistingRoomImage(photoUrl: string) {
+    setExistingRoomImages((images) =>
+      images.filter((image) => image !== photoUrl),
+    );
+  }
+
+  function removePendingRoomPhoto(index: number) {
+    const removed = pendingRoomPhotos[index];
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
+    updatePendingRoomPhotos(
+      pendingRoomPhotos.filter((_, photoIndex) => photoIndex !== index),
+    );
   }
 
   function startNewBranch(hotelId: string) {
@@ -429,6 +530,7 @@ setHotels(completeHotels);
       }
 
       if (roomForm.branchId === branch.id) {
+        clearRoomPhotoSelection();
         setRoomForm(newRoomForm());
       }
 
@@ -480,28 +582,34 @@ setHotels(completeHotels);
   setSaving(true);
 
   try {
-    const payload = {
-      roomTypeOptionId: roomForm.roomTypeOptionId,
-      amenityIds: roomForm.amenityIds,
-      description: roomForm.description.trim() || null,
-      capacity,
-      pricePerNight,
-      totalRooms,
-      ...(!roomForm.id ? { branchId: roomForm.branchId } : {}),
-    };
+    const formData = new FormData();
+    formData.append("roomTypeOptionId", roomForm.roomTypeOptionId);
+    formData.append("amenityIds", JSON.stringify(roomForm.amenityIds));
+    formData.append("description", roomForm.description.trim());
+    formData.append("capacity", String(capacity));
+    formData.append("pricePerNight", String(pricePerNight));
+    formData.append("totalRooms", String(totalRooms));
+    formData.append("existingImages", JSON.stringify(existingRoomImages));
+    if (!roomForm.id) {
+      formData.append("branchId", roomForm.branchId);
+    }
+    pendingRoomPhotos.forEach((photo) =>
+      formData.append("photos", photo.file),
+    );
 
     if (roomForm.id) {
       await adminRequest(
         `/rooms/${encodeURIComponent(roomForm.id)}`,
         "PUT",
-        payload,
+        formData,
       );
       setMessage("Room type updated successfully.");
     } else {
-      await adminRequest("/rooms", "POST", payload);
+      await adminRequest("/rooms", "POST", formData);
       setMessage("Room type created successfully.");
     }
 
+    clearRoomPhotoSelection();
     setRoomForm(newRoomForm());
     await loadData();
   } catch (err) {
@@ -535,6 +643,7 @@ setHotels(completeHotels);
       );
 
       if (roomForm.id === room.id) {
+        clearRoomPhotoSelection();
         setRoomForm(newRoomForm());
       }
 
@@ -1267,7 +1376,7 @@ setHotels(completeHotels);
                       <button
                         type="button"
                         onClick={() =>
-                          setRoomForm(newRoomForm(branch.id))
+                          startNewRoom(branch.id)
                         }
                         disabled={saving}
                       >
@@ -1378,6 +1487,63 @@ setHotels(completeHotels);
                             />
                           </label>
                         </div>
+                        <div className="admin-room-photo-upload">
+                          <strong>Room photos</strong>
+                          <p>
+                            Add up to 8 JPG, PNG or WEBP photos, 5 MB each.
+                          </p>
+                          <label>
+                            Add photos
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              multiple
+                              onChange={handleRoomPhotoSelection}
+                              disabled={
+                                saving ||
+                                existingRoomImages.length +
+                                  pendingRoomPhotos.length >=
+                                  8
+                              }
+                            />
+                          </label>
+                          {(existingRoomImages.length > 0 ||
+                            pendingRoomPhotos.length > 0) && (
+                            <div className="admin-room-photo-list">
+                              {existingRoomImages.map((photo) => (
+                                <div key={photo}>
+                                  <img
+                                    src={getBranchPhotoUrl(photo)}
+                                    alt="Room"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeExistingRoomImage(photo)
+                                    }
+                                    disabled={saving}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                              {pendingRoomPhotos.map((photo, index) => (
+                                <div key={photo.previewUrl}>
+                                  <img src={photo.previewUrl} alt="Room" />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removePendingRoomPhoto(index)
+                                    }
+                                    disabled={saving}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                          <div className="admin-form-actions">
                           <button type="submit" disabled={saving}>
                             {saving && busyAction.toLowerCase().includes("room type")
@@ -1389,7 +1555,10 @@ setHotels(completeHotels);
                           <button
                             type="button"
                             className="admin-secondary-button"
-                            onClick={() => setRoomForm(newRoomForm())}
+                            onClick={() => {
+                              clearRoomPhotoSelection();
+                              setRoomForm(newRoomForm());
+                            }}
                             disabled={saving}
                           >
                             Cancel
@@ -1424,20 +1593,7 @@ setHotels(completeHotels);
                               <button
                                 type="button"
                                 className="admin-secondary-button"
-                                onClick={() =>
-                                  setRoomForm({
-  id: room.id,
-  branchId: branch.id,
-  roomTypeOptionId: room.roomTypeOptionId,
-  description: room.description || "",
-  capacity: String(room.capacity),
-  pricePerNight: String(room.pricePerNight),
-  totalRooms: String(room.totalRooms),
-  amenityIds: room.amenities?.map(
-    (item) => item.amenityId,
-  ) ?? [],
-})
-                                }
+                                onClick={() => editRoom(room, branch.id)}
                                 disabled={saving}
                               >
                                 Edit

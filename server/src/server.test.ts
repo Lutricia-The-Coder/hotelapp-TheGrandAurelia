@@ -503,6 +503,7 @@ describe("Room Types API", () => {
         capacity: 2,
         totalRooms: 10,
         branchId: "branch-test-1",
+        images: ["/uploads/rooms/deluxe-room.jpg"],
       },
     ]);
 
@@ -514,6 +515,9 @@ describe("Room Types API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].name).toBe("Deluxe Room");
+    expect(response.body.data[0].images).toEqual([
+      "/uploads/rooms/deluxe-room.jpg",
+    ]);
     expect(roomFindManyMock).toHaveBeenCalledOnce();
   });
   

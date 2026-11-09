@@ -692,7 +692,15 @@ export default function DiscoverPage({
     .map((room) => (
                 <article className="room-card" key={room.id}>
                   <div className="room-photo">
-                    <div className="room-photo-overlay" />
+                    {room.images?.[0] && (
+                      <img
+                        className="room-photo-image"
+                        src={getBranchPhotoUrl(room.images[0])}
+                        alt={`${room.name} room`}
+                        loading="lazy"
+                      />
+                    )}
+                    {!room.images?.[0] && <div className="room-photo-overlay" />}
                     <span className="room-category">THE GRAND AURELIA</span>
                   </div>
                   <div className="room-card-body">

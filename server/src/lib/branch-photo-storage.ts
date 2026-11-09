@@ -3,13 +3,10 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Express } from "express";
 
-const BRANCH_PHOTO_DIRECTORY = join(
-  process.cwd(),
-  "uploads",
-  "branches",
-);
-
+const BRANCH_PHOTO_DIRECTORY = join(process.cwd(), "uploads", "branches");
 const BRANCH_PHOTO_URL_PREFIX = "/uploads/branches/";
+const ROOM_PHOTO_DIRECTORY = join(process.cwd(), "uploads", "rooms");
+const ROOM_PHOTO_URL_PREFIX = "/uploads/rooms/";
 
 function getValidatedImageExtension(
   file: Express.Multer.File,
@@ -66,22 +63,28 @@ function getValidatedImageExtension(
   return detectedExtension;
 }
 
-function getManagedPhotoPath(photoUrl: string): string | null {
-  if (!photoUrl.startsWith(BRANCH_PHOTO_URL_PREFIX)) {
+function getManagedPhotoPath(
+  photoUrl: string,
+  directory: string,
+  urlPrefix: string,
+): string | null {
+  if (!photoUrl.startsWith(urlPrefix)) {
     return null;
   }
 
-  const filename = photoUrl.slice(BRANCH_PHOTO_URL_PREFIX.length);
+  const filename = photoUrl.slice(urlPrefix.length);
 
   if (!filename || basename(filename) !== filename) {
     return null;
   }
 
-  return join(BRANCH_PHOTO_DIRECTORY, filename);
+  return join(directory, filename);
 }
 
-export async function saveBranchPhotos(
+async function savePhotos(
   files: Express.Multer.File[],
+  directory: string,
+  urlPrefix: string,
 ): Promise<string[]> {
   if (files.length === 0) {
     return [];
@@ -90,35 +93,38 @@ export async function saveBranchPhotos(
   // Validate every file before writing any of them.
   const extensions = files.map(getValidatedImageExtension);
 
-  await mkdir(BRANCH_PHOTO_DIRECTORY, { recursive: true });
+  await mkdir(directory, { recursive: true });
 
   const savedUrls: string[] = [];
 
   try {
     for (let index = 0; index < files.length; index += 1) {
       const filename = `${randomUUID()}${extensions[index]}`;
-      const filePath = join(BRANCH_PHOTO_DIRECTORY, filename);
+      const filePath = join(directory, filename);
 
       await writeFile(filePath, files[index].buffer, {
         flag: "wx",
       });
 
-      savedUrls.push(`${BRANCH_PHOTO_URL_PREFIX}${filename}`);
+      savedUrls.push(`${urlPrefix}${filename}`);
     }
 
     return savedUrls;
   } catch (error) {
     // Remove newly written files if any later write fails.
-    await removeBranchPhotos(savedUrls);
+    await removePhotos(savedUrls, directory, urlPrefix, "photo");
     throw error;
   }
 }
 
-export async function removeBranchPhotos(
+async function removePhotos(
   photoUrls: string[],
+  directory: string,
+  urlPrefix: string,
+  photoType: string,
 ): Promise<void> {
   for (const photoUrl of photoUrls) {
-    const filePath = getManagedPhotoPath(photoUrl);
+    const filePath = getManagedPhotoPath(photoUrl, directory, urlPrefix);
 
     if (!filePath) {
       continue;
@@ -130,8 +136,38 @@ export async function removeBranchPhotos(
       const code = (error as NodeJS.ErrnoException).code;
 
       if (code !== "ENOENT") {
-        console.error("Could not remove branch photo:", error);
+        console.error(`Could not remove ${photoType}:`, error);
       }
     }
   }
+}
+
+export function saveBranchPhotos(
+  files: Express.Multer.File[],
+): Promise<string[]> {
+  return savePhotos(files, BRANCH_PHOTO_DIRECTORY, BRANCH_PHOTO_URL_PREFIX);
+}
+
+export function removeBranchPhotos(photoUrls: string[]): Promise<void> {
+  return removePhotos(
+    photoUrls,
+    BRANCH_PHOTO_DIRECTORY,
+    BRANCH_PHOTO_URL_PREFIX,
+    "branch photo",
+  );
+}
+
+export function saveRoomPhotos(
+  files: Express.Multer.File[],
+): Promise<string[]> {
+  return savePhotos(files, ROOM_PHOTO_DIRECTORY, ROOM_PHOTO_URL_PREFIX);
+}
+
+export function removeRoomPhotos(photoUrls: string[]): Promise<void> {
+  return removePhotos(
+    photoUrls,
+    ROOM_PHOTO_DIRECTORY,
+    ROOM_PHOTO_URL_PREFIX,
+    "room photo",
+  );
 }

@@ -100,6 +100,19 @@ export default function BranchStayPage({
             ) : (
               rooms.map((room) => (
                 <article className="stay-room-card" key={room.id}>
+                  {room.images && room.images.length > 0 && (
+                    <div className="stay-room-photo-gallery">
+                      {room.images.map((image, index) => (
+                        <img
+                          key={image}
+                          className="stay-room-photo"
+                          src={getBranchPhotoUrl(image)}
+                          alt={`${room.name} at ${branch.name}, photo ${index + 1}`}
+                          loading="lazy"
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div>
                     <p className="stay-room-category">THE GRAND AURELIA</p>
                     <h3>{room.name}</h3>

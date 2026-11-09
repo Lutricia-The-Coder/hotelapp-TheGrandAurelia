@@ -1,6 +1,11 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import prisma from "../lib/prisma.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { uploadRoomPhotos } from "../middleware/branch-upload.js";
+import {
+  removeRoomPhotos,
+  saveRoomPhotos,
+} from "../lib/branch-photo-storage.js";
 
 const router = Router();
 
@@ -12,6 +17,62 @@ const roomDetailsInclude = {
     },
   },
 };
+
+function getUploadedFiles(req: Request): Express.Multer.File[] {
+  return Array.isArray(req.files) ? req.files : [];
+}
+
+function parseFormNumber(value: unknown): number | null | undefined {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return value === undefined ? undefined : null;
+}
+
+function parseFormArray(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseExistingRoomImages(
+  value: unknown,
+  currentImages: string[],
+): string[] | null {
+  const parsed = parseFormArray(value);
+
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((image) => typeof image !== "string")
+  ) {
+    return null;
+  }
+
+  const images = [...new Set(parsed as string[])];
+  return images.every((image) => currentImages.includes(image))
+    ? images
+    : null;
+}
+
+function isInvalidUploadedPhoto(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    (error.message.startsWith("Invalid image file") ||
+      error.message.startsWith("An uploaded photo"))
+  );
+}
 
 // GET /api/v1/rooms/branch/:branchId
 router.get("/branch/:branchId", async (req, res) => {
@@ -48,23 +109,30 @@ router.get("/branch/:branchId", async (req, res) => {
 });
 
 // POST /api/v1/rooms
-router.post("/", requireAuth, requireAdmin, async (req, res) => {
+router.post("/", requireAuth, requireAdmin, uploadRoomPhotos, async (req, res) => {
+  let savedPhotos: string[] = [];
+
   try {
     const {
       roomTypeOptionId,
       description,
-      capacity,
-      pricePerNight,
-      totalRooms,
+      capacity: rawCapacity,
+      pricePerNight: rawPricePerNight,
+      totalRooms: rawTotalRooms,
       branchId,
-      amenityIds,
-    } = req.body;
+      amenityIds: rawAmenityIds,
+    } = req.body ?? {};
+    const capacity = parseFormNumber(rawCapacity);
+    const pricePerNight = parseFormNumber(rawPricePerNight);
+    const totalRooms = parseFormNumber(rawTotalRooms);
+    const amenityIds = parseFormArray(rawAmenityIds);
 
     if (
       typeof roomTypeOptionId !== "string" ||
       !roomTypeOptionId.trim() ||
       typeof branchId !== "string" ||
       !branchId.trim() ||
+      typeof capacity !== "number" ||
       !Number.isInteger(capacity) ||
       capacity < 1 ||
       typeof pricePerNight !== "number" ||
@@ -93,7 +161,9 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 
     if (
       totalRooms !== undefined &&
-      (!Number.isInteger(totalRooms) || totalRooms < 1)
+      (typeof totalRooms !== "number" ||
+        !Number.isInteger(totalRooms) ||
+        totalRooms < 1)
     ) {
       res.status(400).json({
         success: false,
@@ -160,6 +230,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
       return;
     }
 
+    savedPhotos = await saveRoomPhotos(getUploadedFiles(req));
     const room = await prisma.roomType.create({
       data: {
         name: option.name,
@@ -169,6 +240,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
         pricePerNight,
         totalRooms: totalRooms ?? 1,
         branchId,
+        images: savedPhotos,
         amenities: {
           create: uniqueAmenityIds.map((amenityId) => ({
             amenity: {
@@ -185,6 +257,15 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
       data: room,
     });
   } catch (error) {
+    await removeRoomPhotos(savedPhotos);
+    if (isInvalidUploadedPhoto(error)) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+
     console.error("Failed to create room type:", error);
 
     res.status(500).json({
@@ -195,7 +276,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 });
 
 // PUT /api/v1/rooms/:id
-router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
+router.put("/:id", requireAuth, requireAdmin, uploadRoomPhotos, async (req, res) => {
   const roomId = req.params.id;
 
   if (typeof roomId !== "string") {
@@ -206,15 +287,23 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  let savedPhotos: string[] = [];
+
   try {
     const {
       roomTypeOptionId,
       description,
-      capacity,
-      pricePerNight,
-      totalRooms,
-      amenityIds,
-    } = req.body;
+      capacity: rawCapacity,
+      pricePerNight: rawPricePerNight,
+      totalRooms: rawTotalRooms,
+      amenityIds: rawAmenityIds,
+      existingImages: rawExistingImages,
+    } = req.body ?? {};
+    const capacity = parseFormNumber(rawCapacity);
+    const pricePerNight = parseFormNumber(rawPricePerNight);
+    const totalRooms = parseFormNumber(rawTotalRooms);
+    const amenityIds =
+      rawAmenityIds === undefined ? undefined : parseFormArray(rawAmenityIds);
 
     const existingRoom = await prisma.roomType.findUnique({
       where: { id: roomId },
@@ -224,6 +313,34 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
       res.status(404).json({
         success: false,
         message: "Room type not found",
+      });
+      return;
+    }
+
+    const existingImages = existingRoom.images ?? [];
+    let retainedPhotos = existingImages;
+    if (rawExistingImages !== undefined) {
+      const parsedImages = parseExistingRoomImages(
+        rawExistingImages,
+        existingImages,
+      );
+
+      if (!parsedImages) {
+        res.status(400).json({
+          success: false,
+          message: "One or more selected photos do not belong to this room.",
+        });
+        return;
+      }
+
+      retainedPhotos = parsedImages;
+    }
+
+    const uploadedFiles = getUploadedFiles(req);
+    if (retainedPhotos.length + uploadedFiles.length > 8) {
+      res.status(400).json({
+        success: false,
+        message: "A room type can have a maximum of 8 photos.",
       });
       return;
     }
@@ -274,6 +391,7 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
       capacity?: number;
       pricePerNight?: number;
       totalRooms?: number;
+      images?: string[];
     } = {};
 
     if (roomTypeOptionId !== undefined) {
@@ -294,7 +412,11 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
     }
 
     if (capacity !== undefined) {
-      if (!Number.isInteger(capacity) || capacity < 1) {
+      if (
+        typeof capacity !== "number" ||
+        !Number.isInteger(capacity) ||
+        capacity < 1
+      ) {
         res.status(400).json({
           success: false,
           message: "Capacity must be a positive integer",
@@ -322,7 +444,11 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
     }
 
     if (totalRooms !== undefined) {
-      if (!Number.isInteger(totalRooms) || totalRooms < 1) {
+      if (
+        typeof totalRooms !== "number" ||
+        !Number.isInteger(totalRooms) ||
+        totalRooms < 1
+      ) {
         res.status(400).json({
           success: false,
           message: "Total rooms must be a positive integer",
@@ -447,6 +573,11 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
       return;
     }
 
+    if (rawExistingImages !== undefined || uploadedFiles.length > 0) {
+      savedPhotos = await saveRoomPhotos(uploadedFiles);
+      data.images = [...retainedPhotos, ...savedPhotos];
+    }
+
     const room = await prisma.$transaction(async (tx) => {
       await tx.roomType.update({
         where: { id: roomId },
@@ -474,11 +605,25 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
       });
     });
 
+    await removeRoomPhotos(
+      existingImages.filter((image) => !room.images.includes(image)),
+    );
+
     res.status(200).json({
       success: true,
       data: room,
     });
   } catch (error) {
+    await removeRoomPhotos(savedPhotos);
+
+    if (isInvalidUploadedPhoto(error)) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+
     if (
       typeof error === "object" &&
       error !== null &&
@@ -595,6 +740,8 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
     const room = await prisma.roomType.delete({
       where: { id: roomId },
     });
+
+    await removeRoomPhotos(room.images);
 
     res.status(200).json({
       success: true,
