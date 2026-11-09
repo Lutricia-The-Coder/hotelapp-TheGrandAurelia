@@ -150,6 +150,43 @@ payment: {
 
 import app from "./app.js";
 
+describe("CORS configuration", () => {
+  it("allows local Vite requests with credentials", async () => {
+    const response = await request(app)
+      .options("/api/v1/favorites/branches")
+      .set("Origin", "http://localhost:5173")
+      .set("Access-Control-Request-Method", "GET")
+      .set("Access-Control-Request-Headers", "authorization");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  it("continues to allow the production frontend", async () => {
+    const response = await request(app)
+      .options("/api/v1/hotels")
+      .set("Origin", "https://hotelapp-the-grand-aurelia.vercel.app")
+      .set("Access-Control-Request-Method", "GET");
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "https://hotelapp-the-grand-aurelia.vercel.app",
+    );
+  });
+
+  it("does not grant CORS access to unknown origins", async () => {
+    const response = await request(app)
+      .options("/api/v1/hotels")
+      .set("Origin", "https://untrusted.example")
+      .set("Access-Control-Request-Method", "GET");
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});
+
 describe("Branch favorites API", () => {
   const branchId = "50cb4a8d-4c79-4f34-8894-2a6ca1214c99";
 

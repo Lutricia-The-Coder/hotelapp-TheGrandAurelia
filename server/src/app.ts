@@ -16,9 +16,20 @@ import { fileURLToPath } from "node:url";
 
 const app = express();
 
+const allowedOrigins = new Set(
+  [
+    "https://hotelapp-the-grand-aurelia.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    process.env.FRONTEND_URL?.trim().replace(/\/+$/, ""),
+  ].filter((origin): origin is string => Boolean(origin)),
+);
+
 app.use(
   cors({
-    origin: "https://hotelapp-the-grand-aurelia.vercel.app",
+    origin: (origin, callback) => {
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
     credentials: true,
   }),
 );
