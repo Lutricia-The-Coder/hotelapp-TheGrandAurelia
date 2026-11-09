@@ -510,6 +510,9 @@ const [selectedStay, setSelectedStay] = useState<{
   hotel: Hotel;
   branch: Branch;
 } | null>(null);
+const [selectedMapBranchId, setSelectedMapBranchId] = useState<string | null>(
+  null,
+);
 const [hotelReviews, setHotelReviews] = useState<
   Record<string, HotelReviewsResponse>
 >({});
@@ -1874,6 +1877,10 @@ const prices = hotelBranches
       return;
     }
 
+    if (page === "map") {
+      setSelectedMapBranchId(null);
+    }
+
     setGuestPage(page);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1883,6 +1890,12 @@ const prices = hotelBranches
   function handleViewStay(hotel: Hotel, branch: Branch) {
     setSelectedStay({ hotel, branch });
     setGuestPage("stay");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleViewBranchLocation(branch: Branch) {
+    setSelectedMapBranchId(branch.id);
+    setGuestPage("map");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -2074,11 +2087,20 @@ const prices = hotelBranches
 />
 {guestPage === "map" ? (
  <BranchMapPage
-   branches={allBranches}
-   loading={loading}
-   error={error}
-   onBack={() => navigateGuestPage("discover")}
- />
+  branches={
+    selectedMapBranchId
+      ? allBranches.filter((branch) => branch.id === selectedMapBranchId)
+      : allBranches
+  }
+  selectedBranchId={selectedMapBranchId}
+  loading={loading}
+  error={error}
+  onBack={() =>
+    selectedMapBranchId && selectedStay
+      ? navigateGuestPage("stay")
+      : navigateGuestPage("discover")
+  }
+/>
 ) : guestPage === "stay" && selectedStay ? (
  <BranchStayPage
    hotel={selectedStay.hotel}
@@ -2087,6 +2109,7 @@ const prices = hotelBranches
    favorite={favoriteBranchIds.includes(selectedStay.branch.id)}
    rating={hotelReviews[selectedStay.branch.id]?.averageRating ?? null}
    onBack={() => navigateGuestPage("discover")}
+   onViewLocation={() => handleViewBranchLocation(selectedStay.branch)}
    onToggleFavorite={() => void handleToggleFavorite(selectedStay.branch)}
    onBookRoom={handleBookStayRoom}
  />

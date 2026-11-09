@@ -1394,6 +1394,21 @@ textarea {
   color: #a77c35;
 }
 
+.stay-location-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.stay-location-link:hover {
+  color: var(--color-gold);
+  text-decoration: underline;
+}
+
 .stay-details-main > h1 {
   margin-top: 12px;
 }

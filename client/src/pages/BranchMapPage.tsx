@@ -5,6 +5,7 @@ type BranchMapPageProps = {
   branches: Branch[];
   loading: boolean;
   error: string;
+  selectedBranchId?: string | null;
   onBack: () => void;
 };
 
@@ -31,9 +32,14 @@ export default function BranchMapPage({
   branches,
   loading,
   error,
+  selectedBranchId = null,
   onBack,
 }: BranchMapPageProps) {
-  const mapUrl = getBranchMapUrl(branches);
+  const mapBranches = selectedBranchId
+    ? branches.filter((branch) => branch.id === selectedBranchId)
+    : branches;
+  const selectedBranch = mapBranches[0];
+  const mapUrl = getBranchMapUrl(mapBranches);
 
   return (
     <section className="branch-map-page">
@@ -42,8 +48,18 @@ export default function BranchMapPage({
       </button>
       <header className="branch-map-page-heading">
         <p className="eyebrow"><span /> FIND YOUR WAY</p>
-        <h1>Our branches <em>on the map.</em></h1>
-        <p>Explore the locations of all The Grand Aurelia branches.</p>
+        <h1>
+          {selectedBranch ? (
+            <>{selectedBranch.name} <em>on the map.</em></>
+          ) : (
+            <>Our branches <em>on the map.</em></>
+          )}
+        </h1>
+        <p>
+          {selectedBranch
+            ? `Find ${selectedBranch.name} in ${selectedBranch.city}, ${selectedBranch.country}.`
+            : "Explore the locations of all The Grand Aurelia branches."}
+        </p>
       </header>
 
       {loading ? (
@@ -54,14 +70,18 @@ export default function BranchMapPage({
         <>
           <iframe
             className="branch-map-frame branch-map-page-frame"
-            title="Map showing all The Grand Aurelia branch locations"
+            title={
+              selectedBranch
+                ? `Map showing ${selectedBranch.name}`
+                : "Map showing all The Grand Aurelia branch locations"
+            }
             src={mapUrl}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             allowFullScreen
           />
           <div className="branch-map-location-list">
-            {branches.map((branch) => (
+            {mapBranches.map((branch) => (
               <a
                 key={branch.id}
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(

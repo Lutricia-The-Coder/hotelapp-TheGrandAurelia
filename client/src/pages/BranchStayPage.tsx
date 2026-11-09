@@ -9,6 +9,7 @@ type BranchStayPageProps = {
   favorite: boolean;
   rating: number | null;
   onBack: () => void;
+  onViewLocation: () => void;
   onToggleFavorite: () => void;
   onBookRoom: (room: RoomType, checkIn: string, checkOut: string, guests: number) => void;
 };
@@ -26,6 +27,7 @@ export default function BranchStayPage({
   favorite,
   rating,
   onBack,
+  onViewLocation,
   onToggleFavorite,
   onBookRoom,
 }: BranchStayPageProps) {
@@ -63,7 +65,14 @@ export default function BranchStayPage({
       <div className="stay-details-layout">
         <div className="stay-details-main">
           <div className="stay-location-rating">
-            <span>⌖ {branch.city}, {branch.country}</span>
+            <button
+              type="button"
+              className="stay-location-link"
+              onClick={onViewLocation}
+              aria-label={`View ${branch.name} on the app map`}
+            >
+              ⌖ {branch.city}, {branch.country}
+            </button>
             {rating !== null && <span>★ {rating.toFixed(1)}</span>}
           </div>
           <h1>{branch.name}</h1>
