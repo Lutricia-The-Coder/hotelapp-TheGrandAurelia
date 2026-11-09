@@ -1,5 +1,5 @@
 export const PASSWORD_POLICY_MESSAGE =
-  "Password must be at least 8 characters, no more than 72 bytes, and include an uppercase letter, a number, and a special character.";
+  "Password must be at least 8 characters, and include an uppercase letter, a number, and a special character.";
 
 export function meetsPasswordPolicy(password: string): boolean {
   return (
