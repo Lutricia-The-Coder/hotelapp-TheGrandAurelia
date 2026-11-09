@@ -29,6 +29,8 @@ body,
   display: flex;
   min-height: 100vh;
   flex-direction: column;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .site-shell > header,
@@ -39,8 +41,9 @@ body,
 }
 
 .site-shell > .site-header {
-  position: static;
-  top: auto;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .site-shell > main {
@@ -3508,5 +3511,111 @@ textarea {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+.auth-register-section {
+  overflow: hidden;
+  padding: 12px;
+}
+
+.auth-card-register {
+  width: min(100%, 560px);
+  max-height: none;
+  overflow: visible;
+  padding: 24px 32px;
+}
+
+.auth-card-register .eyebrow {
+  margin-bottom: 8px;
+}
+
+.auth-card-register h2 {
+  margin: 4px 0;
+  font-size: clamp(26px, 4vw, 34px);
+}
+
+.auth-card-register .auth-description {
+  margin: 0 0 12px;
+}
+
+.auth-card-register form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+}
+
+.auth-card-register form > .auth-label:nth-of-type(n + 3),
+.auth-card-register form > .auth-submit {
+  grid-column: 1 / -1;
+}
+
+.auth-card-register .auth-label {
+  min-width: 0;
+  margin-bottom: 9px;
+}
+
+.auth-card-register .auth-label input,
+.auth-card-register .auth-label select {
+  box-sizing: border-box;
+  min-height: 38px;
+  margin-top: 5px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.auth-card-register .auth-submit {
+  min-height: 42px;
+  margin-top: 2px;
+  padding: 10px;
+}
+
+.auth-card-register .google-auth-divider {
+  margin: 10px 0;
+}
+
+.auth-card-register .google-signin-button {
+  min-height: 40px;
+}
+
+.auth-card-register .auth-switch {
+  margin: 10px 0 0;
+}
+
+@media (max-height: 680px) {
+  .auth-card-register {
+    padding: 16px 28px;
+  }
+
+  .auth-card-register h2 {
+    font-size: 26px;
+  }
+
+  .auth-card-register .auth-description {
+    margin-bottom: 8px;
+  }
+
+  .auth-card-register .auth-label {
+    margin-bottom: 6px;
+  }
+
+  .auth-card-register .auth-label input,
+  .auth-card-register .auth-label select {
+    min-height: 34px;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-card-register {
+    padding: 20px;
+  }
+
+  .auth-card-register form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-card-register form > .auth-label,
+  .auth-card-register form > .auth-submit {
+    grid-column: 1;
   }
 }

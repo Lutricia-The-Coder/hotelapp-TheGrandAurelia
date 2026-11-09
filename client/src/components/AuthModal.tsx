@@ -83,14 +83,22 @@ export default function AuthModal({
 
   return (
     <section
-      className="auth-section"
+      className={
+        authMode === "register"
+          ? "auth-section auth-register-section"
+          : "auth-section"
+      }
       id="auth"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) closeModal();
       }}
     >
       <div
-        className="auth-card"
+        className={
+          authMode === "register"
+            ? "auth-card auth-card-register"
+            : "auth-card"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-title"
