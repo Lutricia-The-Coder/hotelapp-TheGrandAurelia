@@ -21,6 +21,7 @@ const {
   branchFavoriteFindManyMock,
   branchFavoriteUpsertMock,
   branchFavoriteDeleteManyMock,
+  amenityFindManyMock,
   roomFindManyMock,
   roomCreateMock,
   roomUpdateMock,
@@ -60,6 +61,7 @@ transactionMock,
   branchFavoriteFindManyMock: vi.fn(),
   branchFavoriteUpsertMock: vi.fn(),
   branchFavoriteDeleteManyMock: vi.fn(),
+  amenityFindManyMock: vi.fn(),
   roomFindManyMock: vi.fn(),
   roomCreateMock: vi.fn(),
   roomUpdateMock: vi.fn(),
@@ -204,6 +206,9 @@ vi.mock("./lib/prisma.js", () => ({
       findMany: branchFavoriteFindManyMock,
       upsert: branchFavoriteUpsertMock,
       deleteMany: branchFavoriteDeleteManyMock,
+    },
+    amenity: {
+      findMany: amenityFindManyMock,
     },
     roomType: {
       findMany: roomFindManyMock,
@@ -613,7 +618,22 @@ describe("Hotel Branches API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].name).toBe("Central Branch");
-    expect(branchFindManyMock).toHaveBeenCalledOnce();
+    expect(branchFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: {
+          roomTypes: {
+            include: {
+              amenities: {
+                include: { amenity: true },
+              },
+            },
+          },
+          amenities: {
+            include: { amenity: true },
+          },
+        },
+      }),
+    );
   });
   
   it("creates a hotel branch with valid data", async () => {
@@ -665,6 +685,58 @@ describe("Hotel Branches API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.name).toBe("Updated Central Branch");
     expect(branchUpdateMock).toHaveBeenCalledOnce();
+  });
+
+  it("saves selected amenities when updating a branch", async () => {
+    userFindUniqueMock.mockResolvedValue({
+      id: "admin-test-1",
+      role: "ADMIN",
+    });
+    branchFindUniqueMock.mockResolvedValue({
+      id: "branch-test-1",
+      hotelId: "hotel-test-1",
+      name: "Central Branch",
+      address: "123 Main Street",
+      city: "Polokwane",
+      country: "South Africa",
+      images: [],
+      coverImage: null,
+    });
+    amenityFindManyMock.mockResolvedValue([{ id: "amenity-test-1" }]);
+    branchUpdateMock.mockResolvedValue({
+      id: "branch-test-1",
+      name: "Central Branch",
+      amenities: [
+        {
+          amenityId: "amenity-test-1",
+          amenity: { id: "amenity-test-1", name: "Swimming pool" },
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .put("/api/v1/branches/branch-test-1")
+      .set(adminAuthHeader())
+      .field("amenityIds", JSON.stringify(["amenity-test-1"]));
+
+    expect(response.status).toBe(200);
+    expect(branchUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "branch-test-1" },
+        data: expect.objectContaining({
+          amenities: {
+            deleteMany: {},
+            create: [
+              {
+                amenity: {
+                  connect: { id: "amenity-test-1" },
+                },
+              },
+            ],
+          },
+        }),
+      }),
+    );
   });
 
   it("deletes an existing hotel branch", async () => {

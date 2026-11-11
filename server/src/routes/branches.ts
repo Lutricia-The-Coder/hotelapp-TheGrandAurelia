@@ -101,6 +101,58 @@ function resolveCoverImage(
   return value;
 }
 
+function parseAmenityIds(value: unknown): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  let amenityIds: unknown = value;
+
+  if (typeof value === "string") {
+    try {
+      amenityIds = JSON.parse(value) as unknown;
+    } catch {
+      throw new BranchRequestError(
+        "Branch amenities must be provided as a valid JSON array.",
+      );
+    }
+  }
+
+  if (
+    !Array.isArray(amenityIds) ||
+    !amenityIds.every((id) => typeof id === "string")
+  ) {
+    throw new BranchRequestError(
+      "Branch amenities must be provided as an array of IDs.",
+    );
+  }
+
+  const uniqueAmenityIds = [...new Set(amenityIds)];
+
+  if (uniqueAmenityIds.length !== amenityIds.length) {
+    throw new BranchRequestError("Duplicate branch amenities are not allowed.");
+  }
+
+  return uniqueAmenityIds;
+}
+
+async function validateAmenityIds(amenityIds: string[] | undefined) {
+  if (!amenityIds?.length) {
+    return;
+  }
+
+  const amenities = await prisma.amenity.findMany({
+    where: { id: { in: amenityIds } },
+    select: { id: true },
+  });
+
+  if (amenities.length !== amenityIds.length) {
+    throw new BranchRequestError(
+      "One or more selected amenities do not exist.",
+    );
+  }
+}
+
 function getPrismaErrorCode(error: unknown): string | undefined {
   if (
     typeof error === "object" &&
@@ -130,7 +182,13 @@ router.get("/hotel/:hotelId", async (req, res) => {
     const branches = await prisma.hotelBranch.findMany({
       where: { hotelId: req.params.hotelId },
       include: {
-        roomTypes: true,
+        roomTypes: {
+          include: {
+            amenities: {
+              include: { amenity: true },
+            },
+          },
+        },
         amenities: {
           include: {
             amenity: true,
@@ -168,6 +226,7 @@ router.post(
       const body = (req.body ?? {}) as Record<string, unknown>;
 
       const { name, address, city, country, hotelId } = body;
+      const amenityIds = parseAmenityIds(body.amenityIds);
 
       if (
         typeof name !== "string" || !name.trim() ||
@@ -183,6 +242,8 @@ router.post(
         });
         return;
       }
+
+      await validateAmenityIds(amenityIds);
 
       const files = getUploadedFiles(req);
 
@@ -204,6 +265,22 @@ router.post(
           hotelId: hotelId.trim(),
           images: savedPhotos,
           coverImage,
+          ...(amenityIds !== undefined
+            ? {
+                amenities: {
+                  create: amenityIds.map((amenityId) => ({
+                    amenity: {
+                      connect: { id: amenityId },
+                    },
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: {
+          amenities: {
+            include: { amenity: true },
+          },
         },
       });
 
@@ -290,6 +367,8 @@ router.put(
         checkOutTime,
         cancellationPolicy,
       } = body;
+      const amenityIds = parseAmenityIds(body.amenityIds);
+      await validateAmenityIds(amenityIds);
 
       const data: {
         name?: string;
@@ -302,6 +381,14 @@ router.put(
         cancellationPolicy?: string | null;
         images?: string[];
         coverImage?: string | null;
+        amenities?: {
+          deleteMany: Record<string, never>;
+          create: {
+            amenity: {
+              connect: { id: string };
+            };
+          }[];
+        };
       } = {};
 
       for (const [field, value] of Object.entries({
@@ -385,6 +472,17 @@ router.put(
           savedPhotos,
           branch.coverImage,
         );
+      }
+
+      if (amenityIds !== undefined) {
+        data.amenities = {
+          deleteMany: {},
+          create: amenityIds.map((amenityId) => ({
+            amenity: {
+              connect: { id: amenityId },
+            },
+          })),
+        };
       }
 
       if (Object.keys(data).length === 0) {

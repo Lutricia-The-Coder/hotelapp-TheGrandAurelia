@@ -69,6 +69,13 @@ type BranchRecord = {
   cancellationPolicy?: string | null;
   images?: string[];
   coverImage?: string | null;
+  amenities?: {
+    amenityId: string;
+    amenity: {
+      id: string;
+      name: string;
+    };
+  }[];
   roomTypes?: RoomRecord[];
   
 };
@@ -91,6 +98,7 @@ type BranchForm = {
   checkInTime: string;
   checkOutTime: string;
   cancellationPolicy: string;
+  amenityIds: string[];
 };
 
 type RoomForm = {
@@ -117,6 +125,7 @@ function newBranchForm(hotelId = ""): BranchForm {
     checkInTime: "",
     checkOutTime: "",
     cancellationPolicy: "",
+    amenityIds: [],
   };
 }
 
@@ -334,6 +343,7 @@ const [editingAmenityId, setEditingAmenityId] = useState<string | null>(null);
       city: branch.city, country: branch.country, phone: branch.phone || "",
       checkInTime: branch.checkInTime || "", checkOutTime: branch.checkOutTime || "",
       cancellationPolicy: branch.cancellationPolicy || "",
+      amenityIds: branch.amenities?.map((item) => item.amenityId) ?? [],
     });
     clearFeedback();
   }
@@ -469,6 +479,7 @@ setHotels(completeHotels);
       formData.append("address", branchForm.address.trim());
       formData.append("city", branchForm.city.trim());
       formData.append("country", branchForm.country.trim());
+      formData.append("amenityIds", JSON.stringify(branchForm.amenityIds));
 
       if (branchForm.id) {
         formData.append("phone", branchForm.phone.trim());
@@ -886,44 +897,6 @@ setHotels(completeHotels);
             </label>
                                  </div>
 
-                        <div style={{ marginTop: 16 }}>
-                          <h5>Room amenities</h5>
-                          <p>Select the facilities available in this room type.</p>
-
-                          {amenities.length === 0 ? (
-                            <p>No amenities have been added to the catalogue yet.</p>
-                          ) : (
-                            <div className="admin-form-grid">
-                              {amenities.map((amenity) => (
-                                <label
-                                  key={amenity.id}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={roomForm.amenityIds.includes(amenity.id)}
-                                    onChange={(event) =>
-                                      setRoomForm((current) => ({
-                                        ...current,
-                                        amenityIds: event.target.checked
-                                          ? [...current.amenityIds, amenity.id]
-                                          : current.amenityIds.filter(
-                                              (id) => id !== amenity.id,
-                                            ),
-                                      }))
-                                    }
-                                  />
-                                  {amenity.name}
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
                         <div className="admin-form-actions">
             <button type="submit" disabled={saving}>
               {saving && busyAction.includes("room type option")
@@ -1247,6 +1220,42 @@ setHotels(completeHotels);
                         </>
                       )}
                     </div>
+                    <div style={{ marginTop: 16 }}>
+                      <h5>Branch amenities</h5>
+                      <p>Select the facilities available across this branch.</p>
+                      {amenities.length === 0 ? (
+                        <p>No amenities have been added to the catalogue yet.</p>
+                      ) : (
+                        <div className="admin-form-grid">
+                          {amenities.map((amenity) => (
+                            <label
+                              key={amenity.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={branchForm.amenityIds.includes(amenity.id)}
+                                onChange={(event) =>
+                                  setBranchForm((current) => ({
+                                    ...current,
+                                    amenityIds: event.target.checked
+                                      ? [...current.amenityIds, amenity.id]
+                                      : current.amenityIds.filter(
+                                          (id) => id !== amenity.id,
+                                        ),
+                                  }))
+                                }
+                              />
+                              {amenity.name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
  <div style={{ marginTop: 18 }}>
                       <h5>Branch photos</h5>
                       <p style={{ margin: "6px 0 12px", color: "#666" }}>
@@ -1492,6 +1501,42 @@ setHotels(completeHotels);
                               required
                             />
                           </label>
+                        </div>
+                        <div style={{ marginTop: 16 }}>
+                          <h5>Room amenities</h5>
+                          <p>Select the facilities available in this room type.</p>
+                          {amenities.length === 0 ? (
+                            <p>No amenities have been added to the catalogue yet.</p>
+                          ) : (
+                            <div className="admin-form-grid">
+                              {amenities.map((amenity) => (
+                                <label
+                                  key={amenity.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={roomForm.amenityIds.includes(amenity.id)}
+                                    onChange={(event) =>
+                                      setRoomForm((current) => ({
+                                        ...current,
+                                        amenityIds: event.target.checked
+                                          ? [...current.amenityIds, amenity.id]
+                                          : current.amenityIds.filter(
+                                              (id) => id !== amenity.id,
+                                            ),
+                                      }))
+                                    }
+                                  />
+                                  {amenity.name}
+                                </label>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="admin-room-photo-upload">
                           <strong>Room photos</strong>
