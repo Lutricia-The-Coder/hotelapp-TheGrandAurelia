@@ -11,16 +11,16 @@ The platform also includes administrative functionality for managing accommodati
 ## Preview 
 
 ### Landing
-![landing](./src/assets/hero.png)
+![landing](../client/src/assets/hero.png)
 
 ### Admin
-![Admin](./src/assets/admin.png)
+![Admin](../client/src/assets/admin.png)
 
 ### Rooms
-![Rooms](./src/assets/rooms.png)
+![Rooms](../client/src/assets/rooms.png)
 
 ### Favs
-![Favs](./src/assets/favs.png)
+![Favs](../client/src/assets/favs.png)
 ## Technology Stack
 
 ### Frontend
