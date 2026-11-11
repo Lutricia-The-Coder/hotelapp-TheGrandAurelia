@@ -82,16 +82,18 @@ export default function BranchStayPage({
               `${branch.name} offers a considered stay in ${branch.city}, with thoughtful comfort and attentive service.`}
           </p>
 
-          {branch.amenities && branch.amenities.length > 0 && (
-            <section className="stay-amenities">
-              <h2>Amenities</h2>
+          <section className="stay-amenities">
+            <h2>Amenities</h2>
+            {branch.amenities && branch.amenities.length > 0 ? (
               <div>
                 {branch.amenities.map(({ amenity }) => (
                   <span key={amenity.id}>{amenity.name}</span>
                 ))}
               </div>
-            </section>
-          )}
+            ) : (
+              <p>No property amenities have been listed yet.</p>
+            )}
+          </section>
 
           <section className="stay-available-rooms" id="stay-available-rooms">
             <h2>Available rooms</h2>
@@ -118,9 +120,9 @@ export default function BranchStayPage({
                     <h3>{room.name}</h3>
                     <p>{room.description || `Sleeps up to ${room.capacity} guests`}</p>
                     <small>Sleeps {room.capacity} guests</small>
-                    {room.amenities && room.amenities.length > 0 && (
-                      <div className="branch-amenities stay-room-amenities">
-                        <strong>Room amenities</strong>
+                    <div className="branch-amenities stay-room-amenities">
+                      <strong>Room amenities</strong>
+                      {room.amenities && room.amenities.length > 0 ? (
                         <div className="amenity-list">
                           {room.amenities.map(({ amenity }) => (
                             <span
@@ -131,8 +133,10 @@ export default function BranchStayPage({
                             </span>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p>No room amenities have been listed yet.</p>
+                      )}
+                    </div>
                   </div>
                   <div className="stay-room-price">
                     <strong>
