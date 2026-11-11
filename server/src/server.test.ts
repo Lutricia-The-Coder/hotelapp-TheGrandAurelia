@@ -30,10 +30,14 @@ const {
   bookingFindManyMock,
   bookingCreateMock,
   bookingUpdateMock,
+  bookingUpdateManyMock,
   bookingDeleteMock,
   bookingFindUniqueMock,
     bookingAggregateMock,
     paymentCreateMock,
+    paymentFindFirstMock,
+    paymentFindUniqueMock,
+    paymentUpdateManyMock,
 transactionMock,
     reviewFindManyMock,
     reviewUpsertMock,
@@ -66,9 +70,13 @@ transactionMock,
   bookingFindUniqueMock: vi.fn(),
   bookingCreateMock: vi.fn(),
   bookingUpdateMock: vi.fn(),
+  bookingUpdateManyMock: vi.fn(),
   bookingDeleteMock: vi.fn(),
   bookingAggregateMock: vi.fn(),
   paymentCreateMock: vi.fn(),
+  paymentFindFirstMock: vi.fn(),
+  paymentFindUniqueMock: vi.fn(),
+  paymentUpdateManyMock: vi.fn(),
 transactionMock: vi.fn(),
   reviewFindManyMock: vi.fn(),
   reviewUpsertMock: vi.fn(),
@@ -148,6 +156,7 @@ vi.mock("./lib/prisma.js", () => ({
       findUnique: bookingFindUniqueMock,
       create: bookingCreateMock,
       update: bookingUpdateMock,
+      updateMany: bookingUpdateManyMock,
       delete: bookingDeleteMock,
       aggregate: bookingAggregateMock,
     },
@@ -155,10 +164,10 @@ vi.mock("./lib/prisma.js", () => ({
 
 payment: {
   create: paymentCreateMock,
-  findUnique: vi.fn(),
-  findFirst: vi.fn(),
+  findUnique: paymentFindUniqueMock,
+  findFirst: paymentFindFirstMock,
   update: vi.fn(),
-  updateMany: vi.fn(),
+  updateMany: paymentUpdateManyMock,
 },
   },
 }));
@@ -869,6 +878,130 @@ describe("Bookings API", () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toContain("at least 8 characters");
       expect(userFindUniqueMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Paystack payment confirmation", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      process.env.PAYSTACK_SECRET_KEY = "test-paystack-secret";
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      delete process.env.PAYSTACK_SECRET_KEY;
+    });
+
+    it("persists successful payment and booking statuses for the user and admin", async () => {
+      const reference = "GA-payment-test-1";
+      const bookingId = "booking-test-2";
+      const checkIn = new Date("2026-12-01T00:00:00.000Z");
+      const checkOut = new Date("2026-12-03T00:00:00.000Z");
+
+      paymentFindFirstMock
+        .mockResolvedValueOnce({
+          status: "PENDING",
+          amount: 2400,
+          currency: "ZAR",
+          booking: {
+            id: bookingId,
+            checkIn,
+            checkOut,
+            totalPrice: 2400,
+            roomTypeId: "room-test-1",
+            userId: "user-test-1",
+            status: "PENDING",
+          },
+        })
+        .mockResolvedValueOnce({
+          status: "SUCCEEDED",
+          amount: 2400,
+          currency: "ZAR",
+          booking: {
+            id: bookingId,
+            checkIn,
+            checkOut,
+            totalPrice: 2400,
+            roomTypeId: "room-test-1",
+            userId: "user-test-1",
+            status: "CONFIRMED",
+          },
+        });
+
+      paymentFindUniqueMock.mockResolvedValue({
+        id: "payment-test-1",
+        provider: "paystack",
+        providerPaymentId: reference,
+        bookingId,
+        amount: 2400,
+        currency: "ZAR",
+        booking: {
+          userId: "user-test-1",
+          user: { email: "guest@example.com", name: "Guest" },
+          roomType: { name: "Suite" },
+          checkIn,
+          checkOut,
+        },
+      });
+
+      paymentUpdateManyMock.mockResolvedValue({ count: 1 });
+      bookingUpdateManyMock.mockResolvedValue({ count: 1 });
+      transactionMock.mockImplementation(
+        async (callback: (tx: {
+          payment: { updateMany: typeof paymentUpdateManyMock };
+          booking: { updateMany: typeof bookingUpdateManyMock };
+        }) => Promise<unknown>) =>
+          callback({
+            payment: { updateMany: paymentUpdateManyMock },
+            booking: { updateMany: bookingUpdateManyMock },
+          }),
+      );
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            status: true,
+            data: {
+              id: 123,
+              status: "success",
+              reference,
+              amount: 240000,
+              currency: "ZAR",
+              metadata: {
+                paymentId: "payment-test-1",
+                bookingId,
+                userId: "user-test-1",
+              },
+            },
+          }),
+        }),
+      );
+
+      const response = await request(app)
+        .get(`/api/v1/payments/reference/${reference}`)
+        .set(authHeader());
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.paymentStatus).toBe("SUCCEEDED");
+      expect(response.body.data.booking.status).toBe("CONFIRMED");
+      expect(paymentUpdateManyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: "payment-test-1",
+            status: "PENDING",
+            providerPaymentId: reference,
+          },
+          data: { status: "SUCCEEDED" },
+        }),
+      );
+      expect(bookingUpdateManyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: bookingId, status: "PENDING" },
+          data: { status: "CONFIRMED" },
+        }),
+      );
     });
   });
 
