@@ -13,6 +13,10 @@ import {
   meetsPasswordPolicy,
   PASSWORD_POLICY_MESSAGE,
 } from "../lib/password-policy.js";
+import {
+  getGoogleCallbackUrl,
+  getGoogleFrontendUrl,
+} from "../lib/google-oauth-urls.js";
 
 const router = Router();
 
@@ -22,9 +26,13 @@ const GOOGLE_COOKIE_PATH = "/api/v1/auth/google";
 function createGoogleOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  const callbackUrl = process.env.GOOGLE_CALLBACK_URL?.trim();
+  const callbackUrl = getGoogleCallbackUrl(
+    process.env.GOOGLE_CALLBACK_URL,
+    process.env.NODE_ENV,
+    process.env.RENDER,
+  );
 
-  if (!clientId || !clientSecret || !callbackUrl) {
+  if (!clientId || !clientSecret) {
     throw new Error("Google OAuth configuration is incomplete.");
   }
 
@@ -436,15 +444,21 @@ router.get("/google", (_req, res) => {
     console.error("Unable to start Google sign-in:", error);
 
     res.redirect(
-      `${process.env.FRONTEND_URL || "http://localhost:5173"}/?google_error=configuration`,
+      `${getGoogleFrontendUrl(
+        process.env.FRONTEND_URL,
+        process.env.NODE_ENV,
+        process.env.RENDER,
+      )}/?google_error=configuration`,
     );
   }
 });
 
 router.get("/google/callback", async (req, res) => {
-  const frontendUrl =
-    process.env.FRONTEND_URL?.trim().replace(/\/+$/, "") ||
-    "http://localhost:5173";
+  const frontendUrl = getGoogleFrontendUrl(
+    process.env.FRONTEND_URL,
+    process.env.NODE_ENV,
+    process.env.RENDER,
+  );
 
   const cookieOptions = {
     httpOnly: true,

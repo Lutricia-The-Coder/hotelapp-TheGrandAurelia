@@ -142,7 +142,7 @@ For local development, configure the following variables with your own credentia
 DATABASE_URL=YOUR_NEON_DATABASE_URL
 GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
-GOOGLE_CALLBACK_URL=https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
 FRONTEND_URL=http://localhost:5173
 ```
 
@@ -152,6 +152,7 @@ For the Render production environment, set `FRONTEND_URL` to the deployed fronte
 
 ```env
 FRONTEND_URL=https://hotelapp-the-grand-aurelia.vercel.app
+GOOGLE_CALLBACK_URL=https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback
 ```
 
 Paystack uses this value as its payment return URL. If it is set to `http://localhost:5173` in Render, customers will be redirected to localhost after paying.
@@ -197,10 +198,11 @@ The backend runs on its configured local port, normally `3000`.
 - Root directory: `server`
 - Build command: Use the configured Prisma generation and TypeScript build commands.
 - Start command: `npm start`
-- Set `FRONTEND_URL` to `https://hotelapp-the-grand-aurelia.vercel.app`.
+- Set `NODE_ENV=production`, `FRONTEND_URL=https://hotelapp-the-grand-aurelia.vercel.app`, and `GOOGLE_CALLBACK_URL=https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback`.
 - Configure the Paystack webhook URL as `https://hotelapp-thegrandaurelia.onrender.com/api/v1/payments/webhook` in the Paystack dashboard so successful payments update bookings even if the customer closes the return page.
 
 The backend connects to the Neon PostgreSQL database through `DATABASE_URL`.
+In Google Cloud Console, add the production `GOOGLE_CALLBACK_URL` above to the OAuth client’s authorized redirect URIs.
 
 ## API
 

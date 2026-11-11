@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { getPaymentCallbackUrl } from "./lib/payment-callback.js";
+import {
+  getGoogleCallbackUrl,
+  getGoogleFrontendUrl,
+} from "./lib/google-oauth-urls.js";
 const {
   findManyMock,
   findUniqueMock,
@@ -110,6 +114,48 @@ describe("Paystack callback URL", () => {
     ).toBe(
       "https://hotelapp-the-grand-aurelia.vercel.app/?payment=success",
     );
+  });
+});
+
+describe("Google OAuth URLs", () => {
+  it("uses the production callback when the production server is configured with localhost", () => {
+    expect(
+      getGoogleCallbackUrl(
+        "http://localhost:3000/api/v1/auth/google/callback",
+        "production",
+        undefined,
+      ),
+    ).toBe(
+      "https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback",
+    );
+  });
+
+  it("detects the Render environment when NODE_ENV is unset", () => {
+    expect(
+      getGoogleCallbackUrl(
+        "http://localhost:3000/api/v1/auth/google/callback",
+        undefined,
+        "true",
+      ),
+    ).toBe(
+      "https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback",
+    );
+  });
+
+  it("preserves localhost callbacks during local development", () => {
+    expect(
+      getGoogleCallbackUrl(
+        "http://localhost:3000/api/v1/auth/google/callback",
+        "development",
+        undefined,
+      ),
+    ).toBe("http://localhost:3000/api/v1/auth/google/callback");
+  });
+
+  it("returns users to the production frontend after Google sign-in", () => {
+    expect(
+      getGoogleFrontendUrl("http://localhost:5173", "production", undefined),
+    ).toBe("https://hotelapp-the-grand-aurelia.vercel.app");
   });
 });
 
