@@ -8,6 +8,19 @@ The Grand Aurelia provides guests with a platform to discover accommodation, exp
 
 The platform also includes administrative functionality for managing accommodation and reservations.
 
+## Preview 
+
+### Landing
+![landing](./src/assets/hero.png)
+
+### Admin
+![Admin](./src/assets/admin.png)
+
+### Rooms
+![Rooms](./src/assets/rooms.png)
+
+### Favs
+![Favs](./src/assets/favs.png)
 ## Technology Stack
 
 ### Frontend
@@ -198,8 +211,6 @@ The backend runs on its configured local port, normally `3000`.
 - Root directory: `server`
 - Build command: Use the configured Prisma generation and TypeScript build commands.
 - Start command: `npm start`
-- Set `NODE_ENV=production`, `FRONTEND_URL=https://hotelapp-the-grand-aurelia.vercel.app`, and `GOOGLE_CALLBACK_URL=https://hotelapp-thegrandaurelia.onrender.com/api/v1/auth/google/callback`.
-- Configure the Paystack webhook URL as `https://hotelapp-thegrandaurelia.onrender.com/api/v1/payments/webhook` in the Paystack dashboard so successful payments update bookings even if the customer closes the return page.
 
 The backend connects to the Neon PostgreSQL database through `DATABASE_URL`.
 In Google Cloud Console, add the production `GOOGLE_CALLBACK_URL` above to the OAuth client’s authorized redirect URIs.

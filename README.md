@@ -8,6 +8,21 @@ The Grand Aurelia provides guests with a platform to discover accommodation, exp
 
 The platform also includes administrative functionality for managing accommodation and reservations.
 
+## Preview 
+ 
+# RN UI Challenge
+
+## Screenshots
+
+### Home Screen
+![Preview](./screenshots/home-screen.png)
+
+### Profile Screen
+![Preview](./screenshots/profile-screen.png)
+
+### Settings Screen
+![Preview](./screenshots/settings-screen.png)
+
 ## Technology Stack
 
 ### Frontend
@@ -22,7 +37,7 @@ The platform also includes administrative functionality for managing accommodati
 - Express.js
 - TypeScript
 - Prisma ORM
-- PostgreSQL
+- Neon PostgreSQL
 - Multer
 
 ### Integrations
