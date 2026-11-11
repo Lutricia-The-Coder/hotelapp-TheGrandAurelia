@@ -136,7 +136,7 @@ VITE_API_URL=https://hotelapp-thegrandaurelia.onrender.com/api/v1
 
 ### Backend — `server/.env`
 
-Configure the following variables with your own credentials:
+For local development, configure the following variables with your own credentials:
 
 ```env
 DATABASE_URL=YOUR_NEON_DATABASE_URL
@@ -147,6 +147,14 @@ FRONTEND_URL=http://localhost:5173
 ```
 
 Also configure the payment, authentication, and other environment variables required by the backend.
+
+For the Render production environment, set `FRONTEND_URL` to the deployed frontend URL:
+
+```env
+FRONTEND_URL=https://hotelapp-the-grand-aurelia.vercel.app
+```
+
+Paystack uses this value as its payment return URL. If it is set to `http://localhost:5173` in Render, customers will be redirected to localhost after paying.
 
 **Security:** Never commit `.env` files, database credentials, OAuth secrets, or payment secret keys to GitHub.
 
@@ -189,6 +197,8 @@ The backend runs on its configured local port, normally `3000`.
 - Root directory: `server`
 - Build command: Use the configured Prisma generation and TypeScript build commands.
 - Start command: `npm start`
+- Set `FRONTEND_URL` to `https://hotelapp-the-grand-aurelia.vercel.app`.
+- Configure the Paystack webhook URL as `https://hotelapp-thegrandaurelia.onrender.com/api/v1/payments/webhook` in the Paystack dashboard so successful payments update bookings even if the customer closes the return page.
 
 The backend connects to the Neon PostgreSQL database through `DATABASE_URL`.
 

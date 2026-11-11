@@ -118,6 +118,21 @@ export default function BranchStayPage({
                     <h3>{room.name}</h3>
                     <p>{room.description || `Sleeps up to ${room.capacity} guests`}</p>
                     <small>Sleeps {room.capacity} guests</small>
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="branch-amenities stay-room-amenities">
+                        <strong>Room amenities</strong>
+                        <div className="amenity-list">
+                          {room.amenities.map(({ amenity }) => (
+                            <span
+                              key={amenity.id}
+                              className="amenity-tag"
+                            >
+                              {amenity.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="stay-room-price">
                     <strong>
