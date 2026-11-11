@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -86,7 +87,9 @@ export default function useConfirmDialog() {
         {dialog}
         {toast && createPortal(
           <div className="confirmation-toast" role="status" aria-live="polite">
-            <span className="confirmation-toast-icon" aria-hidden="true">✓</span>
+            <span className="confirmation-toast-icon" aria-hidden="true">
+              <Check size={14} strokeWidth={2.5} />
+            </span>
             <span>{toast}</span>
           </div>,
           document.body,

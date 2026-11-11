@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Search, Star } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import type { HotelReviewsResponse } from "../api";
@@ -212,7 +212,7 @@ export default function DiscoverPage({
   }}
 >
   <div className="search-intro">
-    <span className="search-icon" aria-hidden="true">⌕</span>
+    <span className="search-icon" aria-hidden="true"><Search size={18} strokeWidth={2.2} /></span>
     <div>
       <strong>Find your stay</strong>
       <span>Your next escape begins here</span>
@@ -508,9 +508,7 @@ export default function DiscoverPage({
                       }}
                       disabled={reviewsLoadingHotelId === branch.id}
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
-                      </svg>
+                      <Star size={13} strokeWidth={2.1} fill="currentColor" aria-hidden="true" />
                       {branchRating !== null && branchRating !== undefined && (
                         <span>{branchRating.toFixed(1)}</span>
                       )}
@@ -536,9 +534,18 @@ export default function DiscoverPage({
         <article key={review.id} className="hotel-review-card">
           <p>
             <strong>{review.user.name || "Guest"}</strong>
-            {" Â· "}
-            {"★".repeat(review.rating)}
-            {"☆".repeat(5 - review.rating)}
+            <span className="review-separator"> · </span>
+            <span className="review-stars" aria-label={`${review.rating} out of 5 stars`}>
+              {Array.from({ length: 5 }, (_, index) => (
+                <Star
+                  key={`${review.id}-${index}`}
+                  size={12}
+                  strokeWidth={2}
+                  fill={index < review.rating ? "currentColor" : "none"}
+                  aria-hidden="true"
+                />
+              ))}
+            </span>
           </p>
 
           {review.comment && <p>{review.comment}</p>}

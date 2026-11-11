@@ -1,4 +1,9 @@
 import {
+  AlertTriangle,
+  Check,
+  X,
+} from "lucide-react";
+import {
   createContext,
   useCallback,
   useContext,
@@ -38,7 +43,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 role={toast.type === "error" ? "alert" : "status"}
               >
                 <span className="app-toast-icon" aria-hidden="true">
-                  {toast.type === "error" ? "!" : "✓"}
+                  {toast.type === "error" ? (
+                    <AlertTriangle size={14} strokeWidth={2.3} />
+                  ) : (
+                    <Check size={14} strokeWidth={2.5} />
+                  )}
                 </span>
                 <span>{toast.message}</span>
                 <button
@@ -48,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     setToasts((current) => current.filter((item) => item.id !== toast.id))
                   }
                 >
-                  ×
+                  <X size={14} strokeWidth={2.2} aria-hidden="true" />
                 </button>
               </div>
             ))}

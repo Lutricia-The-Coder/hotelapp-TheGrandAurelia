@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import type { RootState } from "../store/store";
 import type { RoomType } from "../types/hotel";
@@ -53,7 +54,7 @@ export default function BookingPage({
           onClick={handleClose}
           aria-label="Close booking form"
         >
-          ×
+          <X size={18} strokeWidth={2.2} aria-hidden="true" />
         </button>
 
         <p className="eyebrow">

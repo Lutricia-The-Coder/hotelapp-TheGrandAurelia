@@ -1,5 +1,5 @@
 
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import type { Branch, RoomType, Hotel } from "./types/hotel";
@@ -176,7 +176,7 @@ function AdminPortal({
             onClick={() => setMenuOpen(false)}
             aria-label="Close navigation"
           >
-            ×
+            <X size={16} strokeWidth={2.3} aria-hidden="true" />
           </button>
         </div>
         <nav aria-label="Admin navigation">

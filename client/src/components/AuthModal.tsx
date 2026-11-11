@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { ToastMessage } from "./ToastNotifications";
 
 type AuthMode =
@@ -122,7 +122,7 @@ export default function AuthModal({
           onClick={closeModal}
           aria-label="Close authentication form"
         >
-          ×
+          <X size={18} strokeWidth={2.2} aria-hidden="true" />
         </button>
 
         <p className="eyebrow">

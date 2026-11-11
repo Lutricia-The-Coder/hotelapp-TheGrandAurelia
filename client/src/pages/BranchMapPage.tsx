@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, MapPin } from "lucide-react";
 import type { Branch } from "../types/hotel";
 import { ToastMessage } from "../components/ToastNotifications";
 
@@ -91,7 +91,7 @@ export default function BranchMapPage({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <span aria-hidden="true">⌖</span>
+                <MapPin size={16} strokeWidth={2} aria-hidden="true" />
                 <span>
                   <strong>{branch.name}</strong>
                   <small>{branch.city}, {branch.country}</small>

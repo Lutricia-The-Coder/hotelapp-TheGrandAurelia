@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Heart, MapPin, Star } from "lucide-react";
 import { useState } from "react";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import { getBranchPhotoUrl, getBranchPhotos } from "../utils/branchPhotos";
@@ -72,9 +72,13 @@ export default function BranchStayPage({
               onClick={onViewLocation}
               aria-label={`View ${branch.name} on the app map`}
             >
-              ⌖ {branch.city}, {branch.country}
+              <MapPin size={13} strokeWidth={2.2} aria-hidden="true" /> {branch.city}, {branch.country}
             </button>
-            {rating !== null && <span>★ {rating.toFixed(1)}</span>}
+            {rating !== null && (
+              <span>
+                <Star size={12} strokeWidth={2.2} aria-hidden="true" /> {rating.toFixed(1)}
+              </span>
+            )}
           </div>
           <h1>{branch.name}</h1>
           <p className="stay-hotel-name">{hotel.name}</p>
@@ -220,7 +224,15 @@ export default function BranchStayPage({
             aria-pressed={favorite}
             onClick={onToggleFavorite}
           >
-            {favorite ? "♥ Saved to favourites" : "♡ Add to favourites"}
+            {favorite ? (
+              <>
+                <Heart size={15} strokeWidth={2.1} fill="currentColor" aria-hidden="true" /> Saved to favourites
+              </>
+            ) : (
+              <>
+                <Heart size={15} strokeWidth={2.1} aria-hidden="true" /> Add to favourites
+              </>
+            )}
           </button>
           <small>No payment required to check availability.</small>
         </aside>
