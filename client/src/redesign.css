@@ -3227,7 +3227,8 @@ textarea {
 }
 
 .favourite-heart-loading {
-  font-size: 22px;
+  display: block;
+  animation: favourites-spin 700ms linear infinite;
 }
 
 .favourite-stay-content {
@@ -3269,8 +3270,12 @@ textarea {
   color: #b38743;
 }
 
-.favourite-rating > span {
-  font-size: 11px;
+.favourite-rating svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 .favourite-hotel-name {
@@ -3372,9 +3377,10 @@ textarea {
 }
 
 .favourites-empty-heart {
+  display: block;
+  width: 52px;
+  height: 52px;
   color: #b38743;
-  font-size: 38px;
-  line-height: 1;
 }
 
 .favourites-empty-state h2 {

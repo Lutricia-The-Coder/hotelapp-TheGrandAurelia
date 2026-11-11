@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import { getBranchPhotoUrl, getBranchPhotos } from "../utils/branchPhotos";
@@ -53,7 +54,7 @@ export default function BranchStayPage({
   return (
     <section className="branch-stay-page">
       <button type="button" className="stay-back-button" onClick={onBack}>
-        ← Back to discovery
+        <ArrowLeft size={14} strokeWidth={2.2} aria-hidden="true" /> Back to discovery
       </button>
 
       <div className="stay-gallery" aria-label={`${branch.name} photos`}>
@@ -148,7 +149,7 @@ export default function BranchStayPage({
                       className="gold-button"
                       onClick={() => onBookRoom(room, checkIn, checkOut, guests)}
                     >
-                      Book now
+                      Book now <ArrowRight size={15} strokeWidth={2.2} aria-hidden="true" />
                     </button>
                   </div>
                 </article>

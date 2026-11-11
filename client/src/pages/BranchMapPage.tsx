@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { Branch } from "../types/hotel";
 import { ToastMessage } from "../components/ToastNotifications";
 
@@ -44,7 +45,7 @@ export default function BranchMapPage({
   return (
     <section className="branch-map-page">
       <button type="button" className="stay-back-button" onClick={onBack}>
-        ← Back to discovery
+        <ArrowLeft size={14} strokeWidth={2.2} aria-hidden="true" /> Back to discovery
       </button>
       <header className="branch-map-page-heading">
         <p className="eyebrow"><span /> FIND YOUR WAY</p>
@@ -95,7 +96,7 @@ export default function BranchMapPage({
                   <strong>{branch.name}</strong>
                   <small>{branch.city}, {branch.country}</small>
                 </span>
-                <span aria-hidden="true">↗</span>
+                <ArrowUpRight size={14} strokeWidth={2.1} aria-hidden="true" />
               </a>
             ))}
           </div>

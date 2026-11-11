@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import type { HotelReviewsResponse } from "../api";
@@ -185,7 +186,7 @@ export default function DiscoverPage({
     </p>
 
     <a className="gold-button" href="#destinations">
-      Explore our branches <span>→</span>
+      Explore our branches <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
     </a>
   </div>
 
@@ -282,7 +283,7 @@ export default function DiscoverPage({
   </label>
 
   <button className="search-button" type="submit">
-    Search <span aria-hidden="true">→</span>
+    Search <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
   </button>
 </form>
         <section className="destinations-section" id="destinations">
@@ -295,7 +296,7 @@ export default function DiscoverPage({
               </p>
             </div>
             <a className="text-link branch-explore-all" href="#rooms">
-              Explore all <span aria-hidden="true">→</span>
+              Explore all <ArrowRight size={14} strokeWidth={2.1} aria-hidden="true" />
             </a>
           </div>
 
@@ -752,7 +753,7 @@ export default function DiscoverPage({
     });
   }}
 >
-  Book now <span>→</span>
+  Book now <ArrowRight size={15} strokeWidth={2.2} aria-hidden="true" />
 </a>
 
                     </div>

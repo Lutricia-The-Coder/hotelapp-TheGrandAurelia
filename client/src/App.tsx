@@ -1,4 +1,5 @@
 
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import type { Branch, RoomType, Hotel } from "./types/hotel";
@@ -193,7 +194,7 @@ function AdminPortal({
           ))}
         </nav>
         <button type="button" className="portal-logout" onClick={onTogglePortal}>
-          <span aria-hidden="true">↗</span> View guest site
+          <ArrowUpRight size={15} strokeWidth={2.2} aria-hidden="true" /> View guest site
         </button>
       </aside>
 
@@ -309,7 +310,7 @@ function AdminDashboard({
         <div className="portal-card-heading">
           <div><p>LATEST ACTIVITY</p><h3>Recent Bookings</h3></div>
           <button type="button" className="portal-text-button" onClick={onViewBookings}>
-            View all →
+            View all <ArrowRight size={14} strokeWidth={2.2} aria-hidden="true" />
           </button>
         </div>
         {loading && <p className="portal-empty">Loading reservations...</p>}

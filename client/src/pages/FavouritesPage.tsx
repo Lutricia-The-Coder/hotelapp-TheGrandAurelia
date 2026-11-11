@@ -1,3 +1,4 @@
+import { Heart, LoaderCircle, MapPin, Star } from "lucide-react";
 import type { FavoriteBranch, HotelReviewsResponse } from "../api";
 import type { Branch, Hotel, RoomType } from "../types/hotel";
 import { getBranchPhotoUrl } from "../utils/branchPhotos";
@@ -65,7 +66,7 @@ export default function FavouritesPage({
         </div>
       ) : favoriteBranches.length === 0 ? (
         <div className="favourites-empty-state">
-          <span className="favourites-empty-heart" aria-hidden="true">♡</span>
+          <Heart className="favourites-empty-heart" aria-hidden="true" size={52} strokeWidth={1.7} fill="currentColor" />
           <h2>Your collection is waiting</h2>
           <p>You haven’t saved any branches yet. Explore stays and save the ones you love.</p>
         </div>
@@ -118,11 +119,9 @@ export default function FavouritesPage({
                     onClick={() => void handleToggleFavorite(branch)}
                   >
                     {favoriteActionBranchId === branch.id ? (
-                      <span className="favourite-heart-loading">…</span>
+                      <LoaderCircle className="favourite-heart-loading" size={18} strokeWidth={2.2} aria-hidden="true" />
                     ) : (
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />
-                      </svg>
+                      <Heart size={18} strokeWidth={2.1} fill="currentColor" aria-hidden="true" />
                     )}
                   </button>
                 </div>
@@ -130,15 +129,13 @@ export default function FavouritesPage({
                 <div className="favourite-stay-content">
                   <div className="favourite-stay-meta">
                     <span className="favourite-location">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
-                        <circle cx="12" cy="10" r="2.5" />
-                      </svg>
+                      <MapPin size={13} strokeWidth={2} aria-hidden="true" />
                       {branch.city}, {branch.country}
                     </span>
                     {rating !== undefined && rating !== null && (
                       <span className="favourite-rating" aria-label={`Rated ${rating.toFixed(1)} out of 5`}>
-                        <span aria-hidden="true">★</span> {rating.toFixed(1)}
+                        <Star size={12} strokeWidth={2.1} fill="currentColor" aria-hidden="true" />
+                        {rating.toFixed(1)}
                       </span>
                     )}
                   </div>

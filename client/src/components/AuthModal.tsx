@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
+import { ArrowRight } from "lucide-react";
 import { ToastMessage } from "./ToastNotifications";
 
 type AuthMode =
@@ -299,7 +300,7 @@ export default function AuthModal({
                   : isForgotPassword
                     ? "Send reset link"
                     : "Reset password"}
-            {!authLoading && <span>→</span>}
+            {!authLoading && <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />}
           </button>
         </form>
 
