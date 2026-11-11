@@ -1576,6 +1576,33 @@ useEffect(() => {
   const allBranches = Object.values(branches).flat();
 
   useEffect(() => {
+    if (!selectedStay) return;
+
+    const updatedHotel = hotels.find(
+      (hotel) => hotel.id === selectedStay.hotel.id,
+    );
+    const updatedBranch = branches[selectedStay.hotel.id]?.find(
+      (branch) => branch.id === selectedStay.branch.id,
+    );
+
+    if (!updatedHotel || !updatedBranch) {
+      setSelectedStay(null);
+      setGuestPage("discover");
+      return;
+    }
+
+    if (
+      updatedHotel !== selectedStay.hotel ||
+      updatedBranch !== selectedStay.branch
+    ) {
+      setSelectedStay({
+        hotel: updatedHotel,
+        branch: updatedBranch,
+      });
+    }
+  }, [branches, hotels, selectedStay]);
+
+  useEffect(() => {
     if (
       guestPage !== "stay" ||
       selectedStay ||
@@ -2024,7 +2051,7 @@ const prices = hotelBranches
           {(adminPage === "branches" || adminPage === "rooms") && (
             <AdminAccommodation
               section={adminPage}
-              onBranchesChanged={loadAccommodationData}
+              onAccommodationChanged={loadAccommodationData}
             />
           )}
           {adminPage === "bookings" && (

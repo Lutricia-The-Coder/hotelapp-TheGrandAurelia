@@ -175,10 +175,10 @@ async function adminRequest<T>(
   return result.data as T;
 }
 export default function AdminAccommodation({
-  onBranchesChanged,
+  onAccommodationChanged,
   section,
 }: {
-  onBranchesChanged?: () => Promise<void>;
+  onAccommodationChanged?: () => Promise<void>;
   section: "branches" | "rooms";
 }) {
   const [hotels, setHotels] = useState<HotelRecord[]>([]);
@@ -494,7 +494,7 @@ setHotels(completeHotels);
       clearBranchPhotoSelection();
       setBranchForm(newBranchForm());
       await loadData();
-      await onBranchesChanged?.();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save branch.");
     } finally {
@@ -536,7 +536,7 @@ setHotels(completeHotels);
 
       setMessage("Branch deleted successfully.");
       await loadData();
-      await onBranchesChanged?.();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to delete branch.",
@@ -612,6 +612,7 @@ setHotels(completeHotels);
     clearRoomPhotoSelection();
     setRoomForm(newRoomForm());
     await loadData();
+    await onAccommodationChanged?.();
   } catch (err) {
     setError(
       err instanceof Error ? err.message : "Failed to save room type.",
@@ -649,6 +650,7 @@ setHotels(completeHotels);
 
       setMessage("Room type deleted successfully.");
       await loadData();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to delete room type.",
@@ -693,6 +695,7 @@ setHotels(completeHotels);
       setRoomTypeOptionName("");
       setEditingRoomTypeOptionId(null);
       await loadData();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save room type option.");
     } finally {
@@ -729,6 +732,7 @@ setHotels(completeHotels);
           : "Room type option activated.",
       );
       await loadData();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update room type option.");
     } finally {
@@ -772,6 +776,7 @@ setHotels(completeHotels);
       setAmenityName("");
       setEditingAmenityId(null);
       await loadData();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save amenity.");
     } finally {
@@ -807,6 +812,7 @@ setHotels(completeHotels);
       );
       setMessage("Amenity deleted successfully.");
       await loadData();
+      await onAccommodationChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete amenity.");
     } finally {
