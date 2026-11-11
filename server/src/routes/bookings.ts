@@ -6,6 +6,7 @@ import {
   requireAdmin,
   type AuthenticatedRequest,
 } from "../middleware/auth.js";import { sendEmail } from "../lib/mailer.js";  
+import { getPaymentCallbackUrl } from "../lib/payment-callback.js";
 
 const router = Router();
 
@@ -771,14 +772,9 @@ provider: "paystack",
 
 try {
   const secretKey = process.env.PAYSTACK_SECRET_KEY?.trim();
-  const frontendUrl = process.env.FRONTEND_URL?.trim();
 
   if (!secretKey) {
     throw new Error("PAYSTACK_SECRET_KEY is missing.");
-  }
-
-  if (!frontendUrl) {
-    throw new Error("FRONTEND_URL is missing.");
   }
 
   const reference = `GA-${payment.id}`;
@@ -796,7 +792,10 @@ try {
         amount: amountInCents,
         currency: "ZAR",
         reference,
-        callback_url: `${frontendUrl.replace(/\/+$/, "")}/?payment=success`,
+        callback_url: getPaymentCallbackUrl(
+          process.env.FRONTEND_URL,
+          process.env.NODE_ENV,
+        ),
         metadata: {
           bookingId: booking.id,
           paymentId: payment.id,

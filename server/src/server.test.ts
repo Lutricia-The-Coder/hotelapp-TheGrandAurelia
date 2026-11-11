@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
+import { getPaymentCallbackUrl } from "./lib/payment-callback.js";
 const {
   findManyMock,
   findUniqueMock,
@@ -84,6 +85,33 @@ transactionMock: vi.fn(),
 const TEST_JWT_SECRET = "test-only-secret-for-booking-tests";
 
 process.env.JWT_SECRET = TEST_JWT_SECRET;
+
+describe("Paystack callback URL", () => {
+  it("uses the production frontend when production is misconfigured with localhost", () => {
+    expect(
+      getPaymentCallbackUrl("http://localhost:5173", "production"),
+    ).toBe(
+      "https://hotelapp-the-grand-aurelia.vercel.app/?payment=success",
+    );
+  });
+
+  it("preserves the configured frontend URL outside production", () => {
+    expect(
+      getPaymentCallbackUrl("http://localhost:5173/", "development"),
+    ).toBe("http://localhost:5173/?payment=success");
+  });
+
+  it("uses the configured production frontend URL", () => {
+    expect(
+      getPaymentCallbackUrl(
+        "https://hotelapp-the-grand-aurelia.vercel.app/",
+        "production",
+      ),
+    ).toBe(
+      "https://hotelapp-the-grand-aurelia.vercel.app/?payment=success",
+    );
+  });
+});
 
 function authHeader(userId = "user-test-1") {
   const token = jwt.sign(
